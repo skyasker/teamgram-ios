@@ -119,8 +119,8 @@ public final class Logger {
         } else {
             assertionFailure()
             let tempLogger = Logger(rootPath: "", basePath: "")
-            tempLogger.logToFile = false
-            tempLogger.logToConsole = false
+            tempLogger.logToFile = true
+            tempLogger.logToConsole = true
             return tempLogger
         }
     }
@@ -298,7 +298,7 @@ public final class Logger {
         let milliseconds = curTime.tv_usec / 1000
         
         var consoleContent: String?
-        if self.logToConsole {
+        if true {
             let content = String(format: "[%@] %d-%d-%d %02d:%02d:%02d.%03d %@", arguments: [tag, Int(timeinfo.tm_year) + 1900, Int(timeinfo.tm_mon + 1), Int(timeinfo.tm_mday), Int(timeinfo.tm_hour), Int(timeinfo.tm_min), Int(timeinfo.tm_sec), Int(milliseconds), string])
             consoleContent = content
             print(content)
