@@ -14,7 +14,7 @@ public extension StoryContainerScreen {
         |> take(1)
         |> mapToSignal { state -> Signal<Void, NoError> in
             if let slice = state.slice {
-                return waitUntilStoryMediaPreloaded(context: context, peerId: slice.peer.id, storyItem: slice.item.storyItem)
+                return waitUntilStoryMediaPreloaded(context: context, peerId: slice.effectivePeer.id, storyItem: slice.item.storyItem)
                 |> timeout(4.0, queue: .mainQueue(), alternate: .complete())
                 |> map { _ -> Void in
                 }
@@ -163,6 +163,7 @@ public extension StoryContainerScreen {
     static func openPeerStoriesCustom(
         context: AccountContext,
         peerId: EnginePeer.Id,
+        focusOnId: Int32? = nil,
         isHidden: Bool,
         initialOrder: [EnginePeer.Id] = [],
         singlePeer: Bool,
@@ -173,7 +174,7 @@ public extension StoryContainerScreen {
         setProgress: @escaping (Signal<Never, NoError>) -> Void,
         completion: @escaping (StoryContainerScreen) -> Void = { _ in }
     ) {
-        let storyContent = StoryContentContextImpl(context: context, isHidden: isHidden, focusedPeerId: peerId, singlePeer: singlePeer, fixedOrder: initialOrder)
+        let storyContent = StoryContentContextImpl(context: context, isHidden: isHidden, focusedPeerId: peerId, focusedStoryId: focusOnId, singlePeer: singlePeer, fixedOrder: initialOrder)
         let signal = storyContent.state
         |> take(1)
         |> mapToSignal { state -> Signal<StoryContentContextState, NoError> in
@@ -185,7 +186,7 @@ public extension StoryContainerScreen {
                 }
                 #endif
                 
-                return waitUntilStoryMediaPreloaded(context: context, peerId: slice.peer.id, storyItem: slice.item.storyItem)
+                return waitUntilStoryMediaPreloaded(context: context, peerId: slice.effectivePeer.id, storyItem: slice.item.storyItem)
                 |> timeout(4.0, queue: .mainQueue(), alternate: .complete())
                 |> map { _ -> StoryContentContextState in
                 }

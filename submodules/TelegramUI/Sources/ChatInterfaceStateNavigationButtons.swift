@@ -57,6 +57,8 @@ func leftNavigationButtonForChatInterfaceState(_ presentationInterfaceState: Cha
     
     if case let .customChatContents(customChatContents) = presentationInterfaceState.subject {
         switch customChatContents.kind {
+        case .hashTagSearch:
+            break
         case .quickReplyMessageInput, .businessLinkSetup:
             if let currentButton = currentButton, currentButton.action == .dismiss {
                 return currentButton
@@ -124,6 +126,8 @@ func rightNavigationButtonForChatInterfaceState(context: AccountContext, present
     
     if case let .customChatContents(customChatContents) = presentationInterfaceState.subject {
         switch customChatContents.kind {
+        case .hashTagSearch:
+            return nil
         case let .quickReplyMessageInput(_, shortcutType):
             switch shortcutType {
             case .generic:
@@ -167,7 +171,7 @@ func rightNavigationButtonForChatInterfaceState(context: AccountContext, present
         }
     }
     if case let .peer(peerId) = presentationInterfaceState.chatLocation {
-        if peerId.isReplies {
+        if peerId.isRepliesOrVerificationCodes {
             if hasMessages {
                 if case .search = currentButton?.action {
                     return currentButton

@@ -22,6 +22,7 @@ import ReactionSelectionNode
 import ChatMediaInputStickerGridItem
 import UndoUI
 import PremiumUI
+import LottieComponent
 
 private protocol ChatEmptyNodeContent {
     func updateLayout(interfaceState: ChatPresentationInterfaceState, subject: ChatEmptyNode.Subject, size: CGSize, transition: ContainedViewLayoutTransition) -> CGSize
@@ -779,6 +780,8 @@ private final class ChatEmptyNodeCloudChatContent: ASDisplayNode, ChatEmptyNodeC
                 insets.top = -9.0
                 imageSpacing = 4.0
                 titleSpacing = 5.0
+            case .hashTagSearch:
+                break
             }
         }
         
@@ -838,6 +841,9 @@ private final class ChatEmptyNodeCloudChatContent: ASDisplayNode, ChatEmptyNodeC
                     }
                     
                     self.businessLink = link
+                case .hashTagSearch:
+                    titleString = ""
+                    strings = []
                 }
             } else {
                 titleString = interfaceState.strings.Conversation_CloudStorageInfo_Title
@@ -899,12 +905,12 @@ private final class ChatEmptyNodeCloudChatContent: ASDisplayNode, ChatEmptyNodeC
                                 linkTextButton.layer.removeAnimation(forKey: "transform.scale")
                                 
                                 if animateScale {
-                                    let transition = Transition(animation: .curve(duration: 0.2, curve: .easeInOut))
+                                    let transition = ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut))
                                     transition.setScale(layer: linkTextButton.layer, scale: topScale)
                                 }
                             } else {
                                 if animateScale {
-                                    let transition = Transition(animation: .none)
+                                    let transition = ComponentTransition(animation: .none)
                                     transition.setScale(layer: linkTextButton.layer, scale: 1.0)
                                     
                                     linkTextButton.layer.animateScale(from: topScale, to: maxScale, duration: 0.13, timingFunction: CAMediaTimingFunctionName.easeOut.rawValue, removeOnCompletion: false, completion: { [weak linkTextButton] _ in
@@ -1198,7 +1204,7 @@ public final class ChatEmptyNodePremiumRequiredChatContent: ASDisplayNode, ChatE
     private let interaction: ChatPanelInterfaceInteraction?
     
     private let iconBackground: SimpleLayer
-    private let icon: UIImageView
+    private let icon =  ComponentView<Empty>()
     private let text = ComponentView<Empty>()
     private let buttonTitle = ComponentView<Empty>()
     private let button: HighlightTrackingButton
@@ -1214,8 +1220,7 @@ public final class ChatEmptyNodePremiumRequiredChatContent: ASDisplayNode, ChatE
         self.interaction = interaction
         
         self.iconBackground = SimpleLayer()
-        self.icon = UIImageView(image: UIImage(bundleImageName: "Chat/Empty Chat/PremiumRequiredIcon")?.withRenderingMode(.alwaysTemplate))
-        
+
         self.button = HighlightTrackingButton()
         self.button.clipsToBounds = true
         
@@ -1225,7 +1230,6 @@ public final class ChatEmptyNodePremiumRequiredChatContent: ASDisplayNode, ChatE
         super.init()
         
         self.layer.addSublayer(self.iconBackground)
-        self.view.addSubview(self.icon)
         
         if !self.isPremiumDisabled {
             self.view.addSubview(self.button)
@@ -1325,11 +1329,28 @@ public final class ChatEmptyNodePremiumRequiredChatContent: ASDisplayNode, ChatE
         contentsHeight += iconBackgroundSize
         contentsHeight += iconTextSpacing
         
-        self.icon.tintColor = serviceColor.primaryText
-        if let image = self.icon.image {
-            transition.updateFrame(view: self.icon, frame: CGRect(origin: CGPoint(x: iconBackgroundFrame.minX + floor((iconBackgroundFrame.width - image.size.width) * 0.5), y: iconBackgroundFrame.minY + floor((iconBackgroundFrame.height - image.size.height) * 0.5)), size: image.size))
+        let iconSize = self.icon.update(
+            transition: .immediate,
+            component: AnyComponent(
+                LottieComponent(
+                    content: LottieComponent.AppBundleContent(name: "PremiumRequired"),
+                    color: serviceColor.primaryText,
+                    size: CGSize(width: 120.0, height: 120.0),
+                    loop: true
+                )
+            ),
+            environment: {},
+            containerSize: CGSize(width: maxWidth - sideInset * 2.0, height: 500.0)
+        )
+        let iconFrame = CGRect(origin: CGPoint(x: iconBackgroundFrame.minX + floor((iconBackgroundFrame.width - iconSize.width) * 0.5), y: iconBackgroundFrame.minY + floor((iconBackgroundFrame.height - iconSize.height) * 0.5)), size: iconSize)
+        if let iconView = self.icon.view {
+            if iconView.superview == nil {
+                iconView.isUserInteractionEnabled = false
+                self.view.addSubview(iconView)
+            }
+            iconView.frame = iconFrame
         }
-        
+
         let textFrame = CGRect(origin: CGPoint(x: floor((contentsWidth - textSize.width) * 0.5), y: contentsHeight), size: textSize)
         if let textView = self.text.view {
             if textView.superview == nil {
@@ -1464,12 +1485,12 @@ private final class EmptyAttachedDescriptionNode: HighlightTrackingButtonNode {
                     self.layer.removeAnimation(forKey: "transform.scale")
                     
                     if animateScale {
-                        let transition = Transition(animation: .curve(duration: 0.2, curve: .easeInOut))
+                        let transition = ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut))
                         transition.setScale(layer: self.layer, scale: topScale)
                     }
                 } else {
                     if animateScale {
-                        let transition = Transition(animation: .none)
+                        let transition = ComponentTransition(animation: .none)
                         transition.setScale(layer: self.layer, scale: 1.0)
                         
                         self.layer.animateScale(from: topScale, to: maxScale, duration: 0.13, timingFunction: CAMediaTimingFunctionName.easeOut.rawValue, removeOnCompletion: false, completion: { [weak self] _ in

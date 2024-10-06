@@ -31,7 +31,7 @@ private enum InnerState: Equatable {
 
 public final class AuthorizationSequenceController: NavigationController, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     static func navigationBarTheme(_ theme: PresentationTheme) -> NavigationBarTheme {
-        return NavigationBarTheme(buttonColor: theme.intro.accentTextColor, disabledButtonColor: theme.intro.disabledTextColor, primaryTextColor: theme.intro.primaryTextColor, backgroundColor: .clear, enableBackgroundBlur: false, separatorColor: .clear, badgeBackgroundColor: theme.rootController.navigationBar.badgeBackgroundColor, badgeStrokeColor: theme.rootController.navigationBar.badgeStrokeColor, badgeTextColor: theme.rootController.navigationBar.badgeTextColor)
+        return NavigationBarTheme(buttonColor: theme.intro.accentTextColor, disabledButtonColor: theme.intro.disabledTextColor, primaryTextColor: theme.intro.primaryTextColor, backgroundColor: .clear, opaqueBackgroundColor: .clear, enableBackgroundBlur: false, separatorColor: .clear, badgeBackgroundColor: theme.rootController.navigationBar.badgeBackgroundColor, badgeStrokeColor: theme.rootController.navigationBar.badgeStrokeColor, badgeTextColor: theme.rootController.navigationBar.badgeTextColor)
     }
     
     private let sharedContext: SharedAccountContext
@@ -239,7 +239,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             let carrier = CTCarrier()
                                             let mnc = carrier.mobileNetworkCode ?? "none"
                                             
-                                            AuthorizationSequenceController.presentEmailComposeController(address: "login@stel.com", subject: strongSelf.presentationData.strings.Login_InvalidPhoneEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_InvalidPhoneEmailBody(formattedNumber, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
+                                            AuthorizationSequenceController.presentEmailComposeController(address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_InvalidPhoneEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_InvalidPhoneEmailBody(formattedNumber, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
                                         }))
                                     case .phoneLimitExceeded:
                                         text = strongSelf.presentationData.strings.Login_PhoneFloodError
@@ -265,7 +265,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             let carrier = CTCarrier()
                                             let mnc = carrier.mobileNetworkCode ?? "none"
                                             
-                                            AuthorizationSequenceController.presentEmailComposeController(address: "login@stel.com", subject: strongSelf.presentationData.strings.Login_PhoneBannedEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_PhoneBannedEmailBody(formattedNumber, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
+                                            AuthorizationSequenceController.presentEmailComposeController(address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_PhoneBannedEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_PhoneBannedEmailBody(formattedNumber, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
                                         }))
                                     case let .generic(info):
                                         text = strongSelf.presentationData.strings.Login_UnknownError
@@ -287,7 +287,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                                 errorString = "unknown"
                                             }
                                             
-                                            AuthorizationSequenceController.presentEmailComposeController(address: "login@stel.com", subject: strongSelf.presentationData.strings.Login_PhoneGenericEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_PhoneGenericEmailBody(formattedNumber, errorString, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
+                                            AuthorizationSequenceController.presentEmailComposeController(address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_PhoneGenericEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_PhoneGenericEmailBody(formattedNumber, errorString, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
                                         }))
                                     case .timeout:
                                         text = strongSelf.presentationData.strings.Login_NetworkError

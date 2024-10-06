@@ -822,7 +822,7 @@ public func layoutInstantPageBlock(webpage: TelegramMediaWebpage, userLocation: 
                 }
             }
             
-            let map = TelegramMediaMap(latitude: latitude, longitude: longitude, heading: nil, accuracyRadius: nil, geoPlace: nil, venue: nil, liveBroadcastingTimeout: nil, liveProximityNotificationRadius: nil)
+            let map = TelegramMediaMap(latitude: latitude, longitude: longitude, heading: nil, accuracyRadius: nil, venue: nil, liveBroadcastingTimeout: nil, liveProximityNotificationRadius: nil)
             let attributes: [InstantPageImageAttribute] = [InstantPageMapAttribute(zoom: zoom, dimensions: dimensions.cgSize)]
             
             var contentSize = CGSize(width: boundingWidth - safeInset * 2.0, height: 0.0)
@@ -884,9 +884,11 @@ public func instantPageLayoutForWebPage(_ webPage: TelegramMediaWebpage, userLoc
     let closingSpacing = spacingBetweenBlocks(upper: previousBlock, lower: nil)
     contentSize.height += closingSpacing
     
-    let feedbackItem = InstantPageFeedbackItem(frame: CGRect(x: 0.0, y: contentSize.height, width: boundingWidth, height: 40.0), webPage: webPage)
-    contentSize.height += feedbackItem.frame.height
-    items.append(feedbackItem)
+    if webPage.webpageId.id != 0 {
+        let feedbackItem = InstantPageFeedbackItem(frame: CGRect(x: 0.0, y: contentSize.height, width: boundingWidth, height: 40.0), webPage: webPage)
+        contentSize.height += feedbackItem.frame.height
+        items.append(feedbackItem)
+    }
     
     return InstantPageLayout(origin: CGPoint(), contentSize: contentSize, items: items)
 }

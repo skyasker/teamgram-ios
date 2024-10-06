@@ -76,6 +76,9 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
 
     private var enableSynchronousImageApply: Bool = false
     
+    private var wasPending: Bool = false
+    private var didChangeFromPendingToSent: Bool = false
+    
     override public var visibility: ListViewItemNodeVisibility {
         didSet {
             let wasVisible = oldValue != .none
@@ -92,6 +95,8 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
             if self.visibilityStatus != oldValue {
                 self.threadInfoNode?.visibility = self.visibilityStatus == true
                 self.replyInfoNode?.visibility = self.visibilityStatus == true
+                
+                self.updateVisibility()
             }
         }
     }
@@ -280,6 +285,13 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
     override public func setupItem(_ item: ChatMessageItem, synchronousLoad: Bool) {
         super.setupItem(item, synchronousLoad: synchronousLoad)
         
+        if item.message.id.namespace == Namespaces.Message.Local || item.message.id.namespace == Namespaces.Message.ScheduledLocal || item.message.id.namespace == Namespaces.Message.QuickReplyLocal {
+            self.wasPending = true
+        }
+        if self.wasPending && (item.message.id.namespace != Namespaces.Message.Local && item.message.id.namespace != Namespaces.Message.ScheduledLocal && item.message.id.namespace != Namespaces.Message.QuickReplyLocal) {
+            self.didChangeFromPendingToSent = true
+        }
+        
         self.replyRecognizer?.allowBothDirections = false//!item.context.sharedContext.immediateExperimentalUISettings.unidirectionalSwipeToReply
         if self.isNodeLoaded {
             self.view.disablesInteractiveTransitionGestureRecognizer = false//!item.context.sharedContext.immediateExperimentalUISettings.unidirectionalSwipeToReply
@@ -452,14 +464,15 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
             case let .peer(peerId):
                 if !peerId.isRepliesOrSavedMessages(accountPeerId: item.context.account.peerId) {
                     if peerId.isGroupOrChannel && item.message.author != nil {
-                        var isBroadcastChannel = false
-                        if let peer = item.message.peers[item.message.id.peerId] as? TelegramChannel, case .broadcast = peer.info {
-                            isBroadcastChannel = true
+                        if let peer = item.message.peers[item.message.id.peerId] as? TelegramChannel, case let .broadcast(info) = peer.info {
+                            if info.flags.contains(.messagesShouldHaveProfiles) {
+                                hasAvatar = incoming
+                            }
+                        } else {
+                            hasAvatar = true
                         }
                         
-                        if !isBroadcastChannel {
-                            hasAvatar = true
-                        } else if case .customChatContents = item.chatLocation {
+                        if case .customChatContents = item.chatLocation {
                             hasAvatar = false
                         }
                     }
@@ -631,10 +644,11 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
                 reactionPeers: dateReactionsAndPeers.peers,
                 displayAllReactionPeers: item.message.id.peerId.namespace == Namespaces.Peer.CloudUser,
                 areReactionsTags: item.message.areReactionsTags(accountPeerId: item.context.account.peerId),
+                messageEffect: item.message.messageEffect(availableMessageEffects: item.associatedData.availableMessageEffects),
                 replyCount: dateReplies,
                 isPinned: item.message.tags.contains(.pinned) && !item.associatedData.isInPinnedListMode && !isReplyThread,
                 hasAutoremove: item.message.isSelfExpiring,
-                canViewReactionList: canViewMessageReactionList(message: item.message, isInline: item.associatedData.isInline),
+                canViewReactionList: canViewMessageReactionList(message: item.message),
                 animationCache: item.controllerInteraction.presentationContext.animationCache,
                 animationRenderer: item.controllerInteraction.presentationContext.animationRenderer
             ))
@@ -718,6 +732,7 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
                     context: item.context,
                     controllerInteraction: item.controllerInteraction,
                     type: .standalone,
+                    peer: nil,
                     threadId: item.message.threadId ?? 1,
                     parentMessage: item.message,
                     constrainedSize: CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude),
@@ -825,9 +840,9 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
             
             let reactions: ReactionsMessageAttribute
             if shouldDisplayInlineDateReactions(message: item.message, isPremium: item.associatedData.isPremium, forceInline: item.associatedData.forceInlineReactions) {
-                reactions = ReactionsMessageAttribute(canViewList: false, isTags: false, reactions: [], recentPeers: [])
+                reactions = ReactionsMessageAttribute(canViewList: false, isTags: false, reactions: [], recentPeers: [], topPeers: [])
             } else {
-                reactions = mergedMessageReactions(attributes: item.message.attributes, isTags: item.message.areReactionsTags(accountPeerId: item.context.account.peerId)) ?? ReactionsMessageAttribute(canViewList: false, isTags: false, reactions: [], recentPeers: [])
+                reactions = mergedMessageReactions(attributes: item.message.attributes, isTags: item.message.areReactionsTags(accountPeerId: item.context.account.peerId)) ?? ReactionsMessageAttribute(canViewList: false, isTags: false, reactions: [], recentPeers: [], topPeers: [])
             }
             
             var reactionButtonsFinalize: ((CGFloat) -> (CGSize, (_ animation: ListViewItemUpdateAnimation) -> ChatMessageReactionButtonsNode))?
@@ -1351,6 +1366,8 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
                         
                         f()
                     }
+                    
+                    strongSelf.updateVisibility()
                 }
             }
             
@@ -1389,7 +1406,7 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
                         }
                     }
                 } else if case .tap = gesture {
-                    self.item?.controllerInteraction.clickThroughMessage()
+                    self.item?.controllerInteraction.clickThroughMessage(self.view, location)
                 }
             }
         default:
@@ -1454,7 +1471,7 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
                                     if case let .broadcast(info) = channel.info, info.flags.contains(.hasDiscussionGroup) {
                                     } else if case .member = channel.participationStatus {
                                     } else {
-                                        item.controllerInteraction.displayMessageTooltip(item.message.id, item.presentationData.strings.Conversation_PrivateChannelTooltip, forwardInfoNode, nil)
+                                        item.controllerInteraction.displayMessageTooltip(item.message.id, item.presentationData.strings.Conversation_PrivateChannelTooltip, false, forwardInfoNode, nil)
                                         return
                                     }
                                 }
@@ -1462,7 +1479,7 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
                             } else if let peer = forwardInfo.source ?? forwardInfo.author {
                                 item.controllerInteraction.openPeer(EnginePeer(peer), peer is TelegramUser ? .info(nil) : .chat(textInputState: nil, subject: nil, peekData: nil), nil, .default)
                             } else if let _ = forwardInfo.authorSignature {
-                                item.controllerInteraction.displayMessageTooltip(item.message.id, item.presentationData.strings.Conversation_ForwardAuthorHiddenTooltip, forwardInfoNode, nil)
+                                item.controllerInteraction.displayMessageTooltip(item.message.id, item.presentationData.strings.Conversation_ForwardAuthorHiddenTooltip, false, forwardInfoNode, nil)
                             }
                         }
                         
@@ -2128,5 +2145,57 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
         }
         
         return (image, self.imageNode.frame)
+    }
+    
+    private func updateVisibility() {
+        guard let item = self.item else {
+            return
+        }
+        
+        var isPlaying = true
+        if case .visible = self.visibility {
+        } else {
+            isPlaying = false
+        }
+        if !item.controllerInteraction.canReadHistory {
+            isPlaying = false
+        }
+        
+        if !isPlaying {
+            self.removeEffectAnimations()
+        }
+        
+        if isPlaying {
+            var alreadySeen = true
+            if item.message.flags.contains(.Incoming) {
+                if let unreadRange = item.controllerInteraction.unreadMessageRange[UnreadMessageRangeKey(peerId: item.message.id.peerId, namespace: item.message.id.namespace)] {
+                    if unreadRange.contains(item.message.id.id) {
+                        if !item.controllerInteraction.seenOneTimeAnimatedMedia.contains(item.message.id) {
+                            alreadySeen = false
+                        }
+                    }
+                }
+            } else {
+                if self.didChangeFromPendingToSent {
+                    if !item.controllerInteraction.seenOneTimeAnimatedMedia.contains(item.message.id) {
+                        alreadySeen = false
+                    }
+                }
+            }
+            
+            if !alreadySeen {
+                item.controllerInteraction.seenOneTimeAnimatedMedia.insert(item.message.id)
+                
+                self.playMessageEffect(force: false)
+            }
+        }
+    }
+    
+    override public func messageEffectTargetView() -> UIView? {
+        if let result = self.dateAndStatusNode.messageEffectTargetView() {
+            return result
+        }
+        
+        return nil
     }
 }

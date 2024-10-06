@@ -60,6 +60,7 @@ final class PeerAllowedReactionsScreenComponent: Component {
         private var reactionsInfoText: ComponentView<Empty>?
         private var reactionInput: ComponentView<Empty>?
         private var reactionCountSection: ComponentView<Empty>?
+        private var paidReactionsSection: ComponentView<Empty>?
         private let actionButton = ComponentView<Empty>()
         
         private var reactionSelectionControl: ComponentView<Empty>?
@@ -79,6 +80,8 @@ final class PeerAllowedReactionsScreenComponent: Component {
         private var allowedReactionCount: Int = 11
         private var appliedReactionSettings: PeerReactionSettings?
         
+        private var areStarsReactionsEnabled: Bool = true
+        
         private var emojiContent: EmojiPagerContentComponent?
         private var emojiContentDisposable: Disposable?
         private var caretPosition: Int?
@@ -92,6 +95,8 @@ final class PeerAllowedReactionsScreenComponent: Component {
         private var resolveStickersBotDisposable: Disposable?
         
         private weak var currentUndoController: UndoOverlayController?
+        
+        private var cachedChevronImage: (UIImage, PresentationTheme)?
         
         override init(frame: CGRect) {
             self.scrollView = UIScrollView()
@@ -137,6 +142,9 @@ final class PeerAllowedReactionsScreenComponent: Component {
             if !self.isEnabled {
                 enabledReactions.removeAll()
             }
+            
+            enabledReactions.removeAll(where: { $0.reaction == .stars })
+            
             guard let availableReactions = self.availableReactions else {
                 return true
             }
@@ -146,13 +154,17 @@ final class PeerAllowedReactionsScreenComponent: Component {
                 if Set(availableReactions.reactions.filter({ $0.isEnabled }).map(\.value)) == Set(enabledReactions.map(\.reaction)) {
                     allowedReactions = .all
                 } else {
-                    allowedReactions = .limited(enabledReactions.map(\.reaction))
+                    if enabledReactions.isEmpty {
+                        allowedReactions = .empty
+                    } else {
+                        allowedReactions = .limited(enabledReactions.map(\.reaction))
+                    }
                 }
             } else {
                 allowedReactions = .empty
             }
             
-            let reactionSettings = PeerReactionSettings(allowedReactions: allowedReactions, maxReactionCount: self.allowedReactionCount >= 11 ? nil : Int32(self.allowedReactionCount))
+            let reactionSettings = PeerReactionSettings(allowedReactions: allowedReactions, maxReactionCount: self.allowedReactionCount >= 11 ? nil : Int32(self.allowedReactionCount), starsAllowed: self.isEnabled && self.areStarsReactionsEnabled)
             
             if self.appliedReactionSettings != reactionSettings {
                 if case .empty = allowedReactions {
@@ -185,7 +197,7 @@ final class PeerAllowedReactionsScreenComponent: Component {
             self.updateScrolling(transition: .immediate)
         }
         
-        private func updateScrolling(transition: Transition) {
+        private func updateScrolling(transition: ComponentTransition) {
             let navigationAlphaDistance: CGFloat = 16.0
             let navigationAlpha: CGFloat = max(0.0, min(1.0, self.scrollView.contentOffset.y / navigationAlphaDistance))
             if let controller = self.environment?.controller(), let navigationBar = controller.navigationBar {
@@ -204,6 +216,8 @@ final class PeerAllowedReactionsScreenComponent: Component {
             guard var enabledReactions = self.enabledReactions else {
                 return
             }
+            enabledReactions.removeAll(where: { $0.reaction == .stars })
+            
             if !self.isEnabled {
                 enabledReactions.removeAll()
             }
@@ -217,6 +231,8 @@ final class PeerAllowedReactionsScreenComponent: Component {
                 case .custom:
                     return true
                 case .builtin:
+                    return false
+                case .stars:
                     return false
                 }
             })
@@ -243,7 +259,7 @@ final class PeerAllowedReactionsScreenComponent: Component {
             } else {
                 allowedReactions = .empty
             }
-            let reactionSettings = PeerReactionSettings(allowedReactions: allowedReactions, maxReactionCount: self.allowedReactionCount == 11 ? nil : Int32(self.allowedReactionCount))
+            let reactionSettings = PeerReactionSettings(allowedReactions: allowedReactions, maxReactionCount: self.allowedReactionCount == 11 ? nil : Int32(self.allowedReactionCount), starsAllowed: self.isEnabled && self.areStarsReactionsEnabled)
             
             let applyDisposable = (component.context.engine.peers.updatePeerReactionSettings(peerId: component.peerId, reactionSettings: reactionSettings)
             |> deliverOnMainQueue).start(error: { [weak self] error in
@@ -328,7 +344,7 @@ final class PeerAllowedReactionsScreenComponent: Component {
             self.environment?.controller()?.push(statsController)
         }
         
-        func update(component: PeerAllowedReactionsScreenComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: Transition) -> CGSize {
+        func update(component: PeerAllowedReactionsScreenComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
             self.isUpdating = true
             defer {
                 self.isUpdating = false
@@ -350,14 +366,28 @@ final class PeerAllowedReactionsScreenComponent: Component {
             if let current = self.enabledReactions {
                 enabledReactions = current
             } else {
-                enabledReactions = component.initialContent.enabledReactions
+                if let value = component.initialContent.reactionSettings?.starsAllowed {
+                    self.areStarsReactionsEnabled = value
+                } else {
+                    self.areStarsReactionsEnabled = component.initialContent.isStarReactionAvailable
+                }
+                
+                var enabledReactionsValue = component.initialContent.enabledReactions
+                if self.areStarsReactionsEnabled {
+                    if let item = component.initialContent.availableReactions?.reactions.first(where: { $0.value == .stars }) {
+                        enabledReactionsValue.insert(EmojiComponentReactionItem(reaction: item.value, file: item.selectAnimation), at: 0)
+                    }
+                }
+                
+                enabledReactions = enabledReactionsValue
                 self.enabledReactions = enabledReactions
                 self.availableReactions = component.initialContent.availableReactions
                 self.isEnabled = component.initialContent.isEnabled
                 self.appliedReactionSettings = component.initialContent.reactionSettings.flatMap { reactionSettings in
                     return PeerReactionSettings(
                         allowedReactions: reactionSettings.allowedReactions,
-                        maxReactionCount: reactionSettings.maxReactionCount == 11 ? nil : reactionSettings.maxReactionCount
+                        maxReactionCount: reactionSettings.maxReactionCount == 11 ? nil : reactionSettings.maxReactionCount,
+                        starsAllowed: reactionSettings.starsAllowed
                     )
                 }
                 self.allowedReactionCount = (component.initialContent.reactionSettings?.maxReactionCount).flatMap(Int.init) ?? 11
@@ -437,6 +467,8 @@ final class PeerAllowedReactionsScreenComponent: Component {
                                             case .custom:
                                                 return true
                                             case .builtin:
+                                                return false
+                                            case .stars:
                                                 return false
                                             }
                                         })
@@ -563,6 +595,11 @@ final class PeerAllowedReactionsScreenComponent: Component {
                                             enabledReactions.append(EmojiComponentReactionItem(reaction: reactionItem.value, file: reactionItem.selectAnimation))
                                         }
                                     }
+                                    if self.areStarsReactionsEnabled {
+                                        if let item = component.initialContent.availableReactions?.reactions.first(where: { $0.value == .stars }) {
+                                            enabledReactions.insert(EmojiComponentReactionItem(reaction: item.value, file: item.selectAnimation), at: 0)
+                                        }
+                                    }
                                     self.enabledReactions = enabledReactions
                                     self.caretPosition = enabledReactions.count
                                 }
@@ -570,7 +607,7 @@ final class PeerAllowedReactionsScreenComponent: Component {
                                 self.displayInput = false
                             }
                             
-                            self.state?.updated(transition: .easeInOut(duration: 0.25))
+                            self.state?.updated(transition: .immediate)
                         }
                     }
                 )),
@@ -862,7 +899,131 @@ final class PeerAllowedReactionsScreenComponent: Component {
                     }
                 }
                 contentHeight += reactionCountSectionSize.height
-                contentHeight += 12.0
+                
+                if component.initialContent.isStarReactionAvailable {
+                    contentHeight += 32.0
+                    
+                    let paidReactionsSection: ComponentView<Empty>
+                    if let current = self.paidReactionsSection {
+                        paidReactionsSection = current
+                    } else {
+                        paidReactionsSection = ComponentView()
+                        self.paidReactionsSection = paidReactionsSection
+                    }
+                    
+                    let parsedString = parseMarkdownIntoAttributedString(environment.strings.PeerInfo_AllowedReactions_StarReactionsFooter, attributes: MarkdownAttributes(
+                        body: MarkdownAttributeSet(font: Font.regular(13.0), textColor: environment.theme.list.freeTextColor),
+                        bold: MarkdownAttributeSet(font: Font.semibold(13.0), textColor: environment.theme.list.freeTextColor),
+                        link: MarkdownAttributeSet(font: Font.regular(13.0), textColor: environment.theme.list.itemAccentColor),
+                        linkAttribute: { url in
+                            return ("URL", url)
+                        }))
+                    
+                    let paidReactionsFooterText = NSMutableAttributedString(attributedString: parsedString)
+                    
+                    if self.cachedChevronImage == nil || self.cachedChevronImage?.1 !== environment.theme {
+                        self.cachedChevronImage = (generateTintedImage(image: UIImage(bundleImageName: "Item List/InlineTextRightArrow"), color: environment.theme.list.itemAccentColor)!, environment.theme)
+                    }
+                    if let range = paidReactionsFooterText.string.range(of: ">"), let chevronImage = self.cachedChevronImage?.0 {
+                        paidReactionsFooterText.addAttribute(.attachment, value: chevronImage, range: NSRange(range, in: paidReactionsFooterText.string))
+                    }
+                    
+                    let paidReactionsSectionSize = paidReactionsSection.update(
+                        transition: transition,
+                        component: AnyComponent(ListSectionComponent(
+                            theme: environment.theme,
+                            header: nil,
+                            footer: AnyComponent(MultilineTextComponent(
+                                text: .plain(paidReactionsFooterText),
+                                maximumNumberOfLines: 0,
+                                highlightColor: environment.theme.list.itemAccentColor.withAlphaComponent(0.2),
+                                highlightAction: { attributes in
+                                    if let _ = attributes[NSAttributedString.Key(rawValue: "URL")] {
+                                        return NSAttributedString.Key(rawValue: "URL")
+                                    } else {
+                                        return nil
+                                    }
+                                }, tapAction: { [weak self] attributes, _ in
+                                    guard let self, let component = self.component else {
+                                        return
+                                    }
+                                    if let url = attributes[NSAttributedString.Key(rawValue: "URL")] as? String {
+                                        component.context.sharedContext.applicationBindings.openUrl(url)
+                                    }
+                                }
+                            )),
+                            items: [
+                                AnyComponentWithIdentity(id: 0, component: AnyComponent(ListSwitchItemComponent(
+                                    theme: environment.theme,
+                                    title: environment.strings.PeerInfo_AllowedReactions_StarReactions,
+                                    value: self.areStarsReactionsEnabled,
+                                    valueUpdated: { [weak self] value in
+                                        guard let self, let component = self.component else {
+                                            return
+                                        }
+                                        self.areStarsReactionsEnabled = value
+                                        
+                                        var enabledReactions = self.enabledReactions ?? []
+                                        if self.areStarsReactionsEnabled {
+                                            if let item = component.initialContent.availableReactions?.reactions.first(where: { $0.value == .stars }) {
+                                                enabledReactions.insert(EmojiComponentReactionItem(reaction: item.value, file: item.selectAnimation), at: 0)
+                                                if let caretPosition = self.caretPosition {
+                                                    self.caretPosition = min(enabledReactions.count, caretPosition + 1)
+                                                }
+                                            }
+                                        } else {
+                                            if let index = enabledReactions.firstIndex(where: { $0.reaction == .stars }) {
+                                                enabledReactions.remove(at: index)
+                                                if let caretPosition = self.caretPosition, caretPosition > index {
+                                                    self.caretPosition = max(0, caretPosition - 1)
+                                                }
+                                            }
+                                        }
+                                        
+                                        self.enabledReactions = enabledReactions
+                                        
+                                        if !self.isUpdating {
+                                            self.state?.updated(transition: .spring(duration: 0.25))
+                                        }
+                                    }
+                                )))
+                            ]
+                        )),
+                        environment: {},
+                        containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: 10000.0)
+                    )
+                    let paidReactionsSectionFrame = CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: paidReactionsSectionSize)
+                    if let paidReactionsSectionView = paidReactionsSection.view {
+                        if paidReactionsSectionView.superview == nil {
+                            self.scrollView.addSubview(paidReactionsSectionView)
+                        }
+                        if animateIn {
+                            paidReactionsSectionView.frame = paidReactionsSectionFrame
+                            if !transition.animation.isImmediate {
+                                paidReactionsSectionView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
+                            }
+                        } else {
+                            transition.setFrame(view: paidReactionsSectionView, frame: paidReactionsSectionFrame)
+                        }
+                    }
+                    contentHeight += paidReactionsSectionSize.height
+                    contentHeight += 12.0
+                } else {
+                    contentHeight += 12.0
+                    
+                    if let paidReactionsSection = self.paidReactionsSection {
+                        self.paidReactionsSection = nil
+                        if let paidReactionsSectionView = paidReactionsSection.view {
+                            if !transition.animation.isImmediate {
+                                paidReactionsSectionView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { [weak paidReactionsSectionView] _ in
+                                    paidReactionsSectionView?.removeFromSuperview()
+                                })
+                            } else {
+                                paidReactionsSectionView.removeFromSuperview()
+                            }
+                        }
+                    }
+                }
             } else {
                 if let reactionsTitleText = self.reactionsTitleText {
                     self.reactionsTitleText = nil
@@ -915,6 +1076,19 @@ final class PeerAllowedReactionsScreenComponent: Component {
                         }
                     }
                 }
+                
+                if let paidReactionsSection = self.paidReactionsSection {
+                    self.paidReactionsSection = nil
+                    if let paidReactionsSectionView = paidReactionsSection.view {
+                        if !transition.animation.isImmediate {
+                            paidReactionsSectionView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { [weak paidReactionsSectionView] _ in
+                                paidReactionsSectionView?.removeFromSuperview()
+                            })
+                        } else {
+                            paidReactionsSectionView.removeFromSuperview()
+                        }
+                    }
+                }
             }
             
             var buttonContents: [AnyComponentWithIdentity<Empty>] = []
@@ -927,6 +1101,8 @@ final class PeerAllowedReactionsScreenComponent: Component {
                 case .custom:
                     return true
                 case .builtin:
+                    return false
+                case .stars:
                     return false
                 }
             }).count : 0
@@ -1005,6 +1181,11 @@ final class PeerAllowedReactionsScreenComponent: Component {
                                 self.recenterOnCaret = true
                             }
                             self.enabledReactions = enabledReactions
+                            
+                            if !enabledReactions.contains(where: { $0.reaction == .stars }) {
+                                self.areStarsReactionsEnabled = false
+                            }
+                            
                             if !self.isUpdating {
                                 self.state?.updated(transition: .spring(duration: 0.25))
                             }
@@ -1099,7 +1280,7 @@ final class PeerAllowedReactionsScreenComponent: Component {
         return View()
     }
     
-    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: Transition) -> CGSize {
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }
@@ -1110,17 +1291,20 @@ public class PeerAllowedReactionsScreen: ViewControllerComponentContainer {
         public let enabledReactions: [EmojiComponentReactionItem]
         public let availableReactions: AvailableReactions?
         public let reactionSettings: PeerReactionSettings?
+        public let isStarReactionAvailable: Bool
         
         init(
             isEnabled: Bool,
             enabledReactions: [EmojiComponentReactionItem],
             availableReactions: AvailableReactions?,
-            reactionSettings: PeerReactionSettings?
+            reactionSettings: PeerReactionSettings?,
+            isStarReactionAvailable: Bool
         ) {
             self.isEnabled = isEnabled
             self.enabledReactions = enabledReactions
             self.availableReactions = availableReactions
             self.reactionSettings = reactionSettings
+            self.isStarReactionAvailable = isStarReactionAvailable
         }
         
         public static func ==(lhs: Content, rhs: Content) -> Bool {
@@ -1137,6 +1321,9 @@ public class PeerAllowedReactionsScreen: ViewControllerComponentContainer {
                 return false
             }
             if lhs.reactionSettings != rhs.reactionSettings {
+                return false
+            }
+            if lhs.isStarReactionAvailable != rhs.isStarReactionAvailable {
                 return false
             }
             return true
@@ -1219,6 +1406,9 @@ public class PeerAllowedReactionsScreen: ViewControllerComponentContainer {
                 case .empty:
                     isEnabled = false
                 }
+                if let starsAllowed = reactionSettings.starsAllowed, starsAllowed {
+                    isEnabled = true
+                }
             }
             
             var missingReactionFiles: [Int64] = []
@@ -1249,7 +1439,7 @@ public class PeerAllowedReactionsScreen: ViewControllerComponentContainer {
                     }
                 }
                 
-                return Content(isEnabled: isEnabled, enabledReactions: result, availableReactions: availableReactions, reactionSettings: reactionSettings)
+                return Content(isEnabled: isEnabled, enabledReactions: result, availableReactions: availableReactions, reactionSettings: reactionSettings, isStarReactionAvailable: cachedData.flags.contains(.paidMediaAllowed))
             }
         }
         |> distinctUntilChanged

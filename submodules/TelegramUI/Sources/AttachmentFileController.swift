@@ -164,33 +164,6 @@ private func attachmentFileControllerEntries(presentationData: PresentationData,
 }
 
 private final class AttachmentFileContext: AttachmentMediaPickerContext {
-    var selectionCount: Signal<Int, NoError> {
-        return .single(0)
-    }
-    
-    var caption: Signal<NSAttributedString?, NoError> {
-        return .single(nil)
-    }
-    
-    public var loadingProgress: Signal<CGFloat?, NoError> {
-        return .single(nil)
-    }
-    
-    public var mainButtonState: Signal<AttachmentMainButtonState?, NoError> {
-        return .single(nil)
-    }
-            
-    func setCaption(_ caption: NSAttributedString) {
-    }
-    
-    func send(mode: AttachmentMediaPickerSendMode, attachmentMode: AttachmentMediaPickerAttachmentMode) {
-    }
-    
-    func schedule() {
-    }
-    
-    func mainButtonAction() {
-    }
 }
 
 class AttachmentFileControllerImpl: ItemListController, AttachmentFileController, AttachmentContainable {
@@ -204,6 +177,7 @@ class AttachmentFileControllerImpl: ItemListController, AttachmentFileController
     public var cancelPanGesture: () -> Void = { }
     public var isContainerPanning: () -> Bool = { return false }
     public var isContainerExpanded: () -> Bool = { return false }
+    public var isMinimized: Bool = false
     
     var delayDisappear = false
     

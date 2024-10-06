@@ -212,7 +212,7 @@ func _internal_shortcutMessageList(account: Account, onlyRemote: Bool) -> Signal
     if onlyRemote {
         pendingShortcuts = .single([:])
     } else {
-        pendingShortcuts = account.postbox.aroundMessageHistoryViewForLocation(.peer(peerId: account.peerId, threadId: nil), anchor: .upperBound, ignoreMessagesInTimestampRange: nil, count: 100, fixedCombinedReadStates: nil, topTaggedMessageIdNamespaces: Set(), tag: nil, appendMessagesFromTheSameGroup: false, namespaces: .just(Set([Namespaces.Message.QuickReplyLocal])), orderStatistics: [])
+        pendingShortcuts = account.postbox.aroundMessageHistoryViewForLocation(.peer(peerId: account.peerId, threadId: nil), anchor: .upperBound, ignoreMessagesInTimestampRange: nil, ignoreMessageIds: Set(), count: 100, fixedCombinedReadStates: nil, topTaggedMessageIdNamespaces: Set(), tag: nil, appendMessagesFromTheSameGroup: false, namespaces: .just(Set([Namespaces.Message.QuickReplyLocal])), orderStatistics: [])
         |> map { view , _, _ -> [String: EngineMessage] in
             var topMessages: [String: EngineMessage] = [:]
             for entry in view.entries {
@@ -742,7 +742,7 @@ extension TelegramBusinessIntro {
     convenience init(apiBusinessIntro: Api.BusinessIntro) {
         switch apiBusinessIntro {
         case let .businessIntro(_, title, description, sticker):
-            self.init(title: title, text: description, stickerFile: sticker.flatMap(telegramMediaFileFromApiDocument))
+            self.init(title: title, text: description, stickerFile: sticker.flatMap { telegramMediaFileFromApiDocument($0, altDocuments: []) })
         }
     }
     

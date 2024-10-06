@@ -213,9 +213,15 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
             let badgeFont = Font.regular(floor(presentationData.fontSize.baseDisplaySize * 11.0 / 17.0))
             
             var incoming = message.effectivelyIncoming(context.account.peerId)
-            if let subject = associatedData.subject, case let .messageOptions(_, _, info) = subject, case .forward = info {
-                incoming = false
+            if let subject = associatedData.subject, case let .messageOptions(_, _, info) = subject {
+                if case .forward = info {
+                    incoming = false
+                } else if case let .link(link) = info, link.isCentered {
+                    incoming = true
+                }
             }
+            
+            let isAd = message.adAttribute != nil
             
             var isReplyThread = false
             if case .replyThread = chatLocation {
@@ -230,7 +236,7 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                 if let peer = forwardInfo.author {
                     author = peer
                 } else if let authorSignature = forwardInfo.authorSignature {
-                    author = TelegramUser(id: PeerId(namespace: Namespaces.Peer.Empty, id: PeerId.Id._internalFromInt64Value(Int64(authorSignature.persistentHashValue % 32))), accessHash: nil, firstName: authorSignature, lastName: nil, username: nil, phone: nil, photo: [], botInfo: nil, restrictionInfo: nil, flags: [], emojiStatus: nil, usernames: [], storiesHidden: nil, nameColor: nil, backgroundEmojiId: nil, profileColor: nil, profileBackgroundEmojiId: nil)
+                    author = TelegramUser(id: PeerId(namespace: Namespaces.Peer.Empty, id: PeerId.Id._internalFromInt64Value(Int64(authorSignature.persistentHashValue % 32))), accessHash: nil, firstName: authorSignature, lastName: nil, username: nil, phone: nil, photo: [], botInfo: nil, restrictionInfo: nil, flags: [], emojiStatus: nil, usernames: [], storiesHidden: nil, nameColor: nil, backgroundEmojiId: nil, profileColor: nil, profileBackgroundEmojiId: nil, subscriberCount: nil)
                 }
             }
             
@@ -314,6 +320,12 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                     flags.remove(.preferMediaInline)
                     mediaAndFlags = (mediaAndFlagsValue.0, flags)
                 }
+                if let adAttribute = message.adAttribute, adAttribute.hasContentMedia {
+                    var flags = mediaAndFlagsValue.1
+                    flags.remove(.preferMediaInline)
+                    flags.insert(.preferMediaBeforeText)
+                    mediaAndFlags = (mediaAndFlagsValue.0, flags)
+                }
             }
             
             var contentMediaAspectFilled = false
@@ -342,7 +354,7 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                             contentFileValue = file
                         }
                         
-                        if shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: file) {
+                        if shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: file, isAd: isAd) {
                             contentMediaAutomaticDownload = .full
                         } else if shouldPredownloadMedia(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, media: file) {
                             contentMediaAutomaticDownload = .prefetch
@@ -394,6 +406,8 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                 } else {
                     let contentMode: InteractiveMediaNodeContentMode = contentMediaAspectFilled ? .aspectFill : .aspectFit
                     
+                    let automaticDownload = shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: contentMediaValue, isAd: isAd)
+                    
                     let (_, initialImageWidth, refineLayout) = makeContentMedia(
                         context,
                         presentationData,
@@ -402,7 +416,8 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                         attributes,
                         contentMediaValue,
                         nil,
-                        .full,
+                        nil,
+                        automaticDownload ? .full : .none,
                         associatedData.automaticDownloadPeerType,
                         associatedData.automaticDownloadPeerId,
                         .constrained(CGSize(width: constrainedSize.width - insets.left - insets.right, height: constrainedSize.height)),
@@ -422,7 +437,7 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
             
             let contentFileContinueLayout: ChatMessageInteractiveFileNode.ContinueLayout?
             if let contentFileValue {
-                let automaticDownload = shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: contentFileValue)
+                let automaticDownload = shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: contentFileValue, isAd: isAd)
                 
                 let (_, refineLayout) = makeContentFile(ChatMessageInteractiveFileNode.Arguments(
                     context: context,
@@ -702,6 +717,8 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                 
                 var statusLayoutAndContinue: (CGFloat, (CGFloat) -> (CGSize, (ListViewItemUpdateAnimation) -> ChatMessageDateAndStatusNode))?
                 if case .customChatContents = associatedData.subject {
+                } else if !presentationData.chatBubbleCorners.hasTails {
+                } else if case let .messageOptions(_, _, info) = associatedData.subject, case let .link(link) = info, link.isCentered {
                 } else if case let .linear(_, bottom) = position {
                     switch bottom {
                     case .None, .Neighbour(_, .footer, _):
@@ -724,10 +741,11 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                                 reactionPeers: dateReactionsAndPeers.peers,
                                 displayAllReactionPeers: message.id.peerId.namespace == Namespaces.Peer.CloudUser,
                                 areReactionsTags: message.areReactionsTags(accountPeerId: context.account.peerId),
+                                messageEffect: message.messageEffect(availableMessageEffects: associatedData.availableMessageEffects),
                                 replyCount: dateReplies,
                                 isPinned: message.tags.contains(.pinned) && !associatedData.isInPinnedListMode && !isReplyThread,
                                 hasAutoremove: message.isSelfExpiring,
-                                canViewReactionList: canViewMessageReactionList(message: message, isInline: associatedData.isInline),
+                                canViewReactionList: canViewMessageReactionList(message: message),
                                 animationCache: controllerInteraction.presentationContext.animationCache,
                                 animationRenderer: controllerInteraction.presentationContext.animationRenderer
                             ))
@@ -1308,6 +1326,12 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                                     }
                                     controllerInteraction.activateMessagePinch(sourceNode)
                                 }
+                                contentMedia.playMessageEffect = { [weak controllerInteraction] message in
+                                    guard let controllerInteraction else {
+                                        return
+                                    }
+                                    controllerInteraction.playMessageEffect(message)
+                                }
                                 contentMedia.activateLocalContent = { [weak self] mode in
                                     guard let self else {
                                         return
@@ -1706,6 +1730,24 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
             return result
         }
         if let result = self.contentInstantVideo?.dateAndStatusNode.reactionView(value: value) {
+            return result
+        }
+        return nil
+    }
+    
+    public func messageEffectTargetView() -> UIView? {
+        if let statusNode = self.statusNode, !statusNode.isHidden {
+            if let result = statusNode.messageEffectTargetView() {
+                return result
+            }
+        }
+        if let result = self.contentFile?.dateAndStatusNode.messageEffectTargetView() {
+            return result
+        }
+        if let result = self.contentMedia?.dateAndStatusNode.messageEffectTargetView() {
+            return result
+        }
+        if let result = self.contentInstantVideo?.dateAndStatusNode.messageEffectTargetView() {
             return result
         }
         return nil

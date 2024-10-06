@@ -20,8 +20,12 @@ import MediaEditor
 import EntityKeyboardGifContent
 import CameraButtonComponent
 import BundleIconComponent
+import LottieComponent
+import LottieComponentResourceContent
 import UndoUI
 import GalleryUI
+import TextLoadingEffect
+import TelegramStringFormatting
 
 private final class StickerSelectionComponent: Component {
     typealias EnvironmentType = Empty
@@ -237,7 +241,7 @@ private final class StickerSelectionComponent: Component {
             self.state?.updated(transition: .easeInOut(duration: 0.2))
         }
         
-        func update(component: StickerSelectionComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: Transition) -> CGSize {
+        func update(component: StickerSelectionComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
             self.backgroundColor = component.backgroundColor
             let panelBackgroundColor = component.backgroundColor.withMultipliedAlpha(0.85)
             self.panelBackgroundView.updateColor(color: panelBackgroundColor, transition: .immediate)
@@ -421,7 +425,7 @@ private final class StickerSelectionComponent: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }
@@ -532,7 +536,10 @@ public class StickerPickerScreen: ViewController {
             self.containerView.addSubview(self.hostView)
             
             if controller.hasInteractiveStickers {
-                self.storyStickersContentView = StoryStickersContentView(frame: .zero)
+                self.storyStickersContentView = StoryStickersContentView(
+                    context: context,
+                    weather: controller.weather
+                )
                 self.storyStickersContentView?.locationAction = { [weak self] in
                     self?.controller?.presentLocationPicker()
                 }
@@ -542,8 +549,18 @@ public class StickerPickerScreen: ViewController {
                 self.storyStickersContentView?.reactionAction = { [weak self] in
                     self?.controller?.addReaction()
                 }
-                self.storyStickersContentView?.cameraAction = { [weak self] in
-                    self?.controller?.addCamera()
+                self.storyStickersContentView?.linkAction = { [weak self] in
+                    guard let self, let controller = self.controller else {
+                        return
+                    }
+                    if controller.context.isPremium {
+                        controller.addLink()
+                    } else {
+                        self.presentLinkPremiumSuggestion()
+                    }
+                }
+                self.storyStickersContentView?.weatherAction = { [weak self] in
+                    self?.controller?.addWeather()
                 }
             }
             
@@ -735,7 +752,7 @@ public class StickerPickerScreen: ViewController {
                 
                 let message = Message(stableId: 0, stableVersion: 0, id: MessageId(peerId: PeerId(0), namespace: Namespaces.Message.Local, id: 0), globallyUniqueId: nil, groupingKey: nil, groupInfo: nil, threadId: nil, timestamp: 0, flags: [], tags: [], globalTags: [], localTags: [], customTags: [], forwardInfo: nil, author: nil, text: "", attributes: [], media: [file.media], peers: SimpleDictionary(), associatedMessages: SimpleDictionary(), associatedMessageIds: [], associatedMedia: [:], associatedThreadInfo: nil, associatedStories: [:])
                 
-                let gallery = GalleryController(context: context, source: .standaloneMessage(message), streamSingleVideo: true, replaceRootController: { _, _ in
+                let gallery = GalleryController(context: context, source: .standaloneMessage(message, nil), streamSingleVideo: true, replaceRootController: { _, _ in
                 }, baseNavigationController: nil)
                 gallery.setHintWillBePresentedInPreviewingContext(true)
                 
@@ -799,7 +816,7 @@ public class StickerPickerScreen: ViewController {
                                 controller.present(UndoOverlayController(presentationData: presentationData, content: .universal(animation: "anim_gif", scale: 0.075, colors: [:], title: presentationData.strings.Premium_MaxSavedGifsTitle("\(limit)").string, text: text, customUndoText: nil, timeout: nil), elevatedLayout: false, animateInAsReplacement: false, action: { [weak controller] action in
                                     if case .info = action, let controller {
                                         let premiumController = context.sharedContext.makePremiumIntroController(context: context, source: .savedGifs, forceDark: controller.forceDark, dismissed: nil)
-                                        controller.push(premiumController)
+                                        controller.pushController(premiumController)
                                         return true
                                     }
                                     return false
@@ -1633,8 +1650,34 @@ public class StickerPickerScreen: ViewController {
                 self.controller?.updateModalStyleOverlayTransitionFactor(0.0, transition: positionTransition)
             }
         }
+        
+        func presentLinkPremiumSuggestion() {
+            guard let controller = self.controller else {
+                return
+            }
+            let tooltipController = UndoOverlayController(
+                presentationData: self.presentationData,
+                content: .linkCopied(
+                    text: self.presentationData.strings.Story_Editor_TooltipLinkPremium
+                ),
+                elevatedLayout: true,
+                position: .top,
+                animateInAsReplacement: false, action: { [weak controller] action in
+                    if case .info = action, let controller {
+                        let _ = controller.completion(nil)
+                        controller.dismiss(animated: true)
+                        
+                        let premiumController = controller.context.sharedContext.makePremiumIntroController(context: controller.context, source: .storiesLinks, forceDark: controller.forceDark, dismissed: nil)
+                        controller.pushController(premiumController)
+                        return true
+                    }
+                    return false
+                }
+            )
+            controller.present(tooltipController, in: .window(.root))
+        }
                 
-        func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: Transition) {
+        func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: ComponentTransition) {
             guard let controller = self.controller else {
                 return
             }
@@ -1727,11 +1770,11 @@ public class StickerPickerScreen: ViewController {
             transition.setFrame(view: self.containerView, frame: clipFrame)
                         
             if let content = self.content {
-                var stickersTransition: Transition = transition
+                var stickersTransition: ComponentTransition = transition
                 if let scheduledEmojiContentAnimationHint = self.scheduledEmojiContentAnimationHint {
                     self.scheduledEmojiContentAnimationHint = nil
                     let contentAnimation = scheduledEmojiContentAnimationHint
-                    stickersTransition = Transition(animation: .curve(duration: 0.4, curve: .spring)).withUserData(contentAnimation)
+                    stickersTransition = ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)).withUserData(contentAnimation)
                 }
                 
                 var contentSize = self.hostView.update(
@@ -1953,18 +1996,18 @@ public class StickerPickerScreen: ViewController {
                             let initialVelocity: CGFloat = distance.isZero ? 0.0 : abs(velocity.y / distance)
                             let transition = ContainedViewLayoutTransition.animated(duration: 0.45, curve: .customSpring(damping: 124.0, initialVelocity: initialVelocity))
 
-                            self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: Transition(transition))
+                            self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: ComponentTransition(transition))
                         } else {
                             self.isExpanded = true
                             
-                            self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: Transition(.animated(duration: 0.3, curve: .easeInOut)))
+                            self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: ComponentTransition(.animated(duration: 0.3, curve: .easeInOut)))
                         }
                     } else if (velocity.y < -300.0 || offset < topInset / 2.0) {
                         let initialVelocity: CGFloat = offset.isZero ? 0.0 : abs(velocity.y / offset)
                         let transition = ContainedViewLayoutTransition.animated(duration: 0.45, curve: .customSpring(damping: 124.0, initialVelocity: initialVelocity))
                         self.isExpanded = true
                        
-                        self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: Transition(transition))
+                        self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: ComponentTransition(transition))
                     } else {
                         if let listNode = listNode {
                             listNode.scroller.setContentOffset(CGPoint(), animated: false)
@@ -1972,7 +2015,7 @@ public class StickerPickerScreen: ViewController {
                             scrollView.setContentOffset(CGPoint(x: 0.0, y: -scrollView.contentInset.top), animated: false)
                         }
                         
-                        self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: Transition(.animated(duration: 0.3, curve: .easeInOut)))
+                        self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: ComponentTransition(.animated(duration: 0.3, curve: .easeInOut)))
                     }
                     
                     if !dismissing {
@@ -1985,7 +2028,7 @@ public class StickerPickerScreen: ViewController {
                 case .cancelled:
                     self.panGestureArguments = nil
                     
-                    self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: Transition(.animated(duration: 0.3, curve: .easeInOut)))
+                    self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: ComponentTransition(.animated(duration: 0.3, curve: .easeInOut)))
                 default:
                     break
             }
@@ -2000,7 +2043,7 @@ public class StickerPickerScreen: ViewController {
             guard let (layout, navigationHeight) = self.currentLayout else {
                 return
             }
-            self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: Transition(transition))
+            self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: ComponentTransition(transition))
         }
     }
     
@@ -2008,15 +2051,37 @@ public class StickerPickerScreen: ViewController {
         return self.displayNode as! Node
     }
     
+    public enum Weather {
+        public struct LoadedWeather {
+            public let emoji: String
+            public let emojiFile: TelegramMediaFile
+            public let temperature: Double
+            
+            public init(emoji: String, emojiFile: TelegramMediaFile, temperature: Double) {
+                self.emoji = emoji
+                self.emojiFile = emojiFile
+                self.temperature = temperature
+            }
+        }
+        
+        case none
+        case notDetermined
+        case notAllowed
+        case notPreloaded
+        case fetching
+        case loaded(StickerPickerScreen.Weather.LoadedWeather)
+    }
+    
     private let context: AccountContext
     private let theme: PresentationTheme
-    fileprivate let forceDark: Bool
+    let forceDark: Bool
     private let inputData: Signal<StickerPickerInput, NoError>
-    fileprivate let defaultToEmoji: Bool
+    let defaultToEmoji: Bool
     let isFullscreen: Bool
     let hasEmoji: Bool
     let hasGifs: Bool
     let hasInteractiveStickers: Bool
+    let weather: Signal<StickerPickerScreen.Weather, NoError>
     
     private var currentLayout: ContainerViewLayout?
     
@@ -2029,9 +2094,10 @@ public class StickerPickerScreen: ViewController {
     public var presentLocationPicker: () -> Void = { }
     public var presentAudioPicker: () -> Void = { }
     public var addReaction: () -> Void = { }
-    public var addCamera: () -> Void = { }
+    public var addLink: () -> Void = { }
+    public var addWeather: () -> Void = { }
     
-    public init(context: AccountContext, inputData: Signal<StickerPickerInput, NoError>, forceDark: Bool = false, expanded: Bool = false, defaultToEmoji: Bool = false, hasEmoji: Bool = true, hasGifs: Bool = false, hasInteractiveStickers: Bool = true) {
+    public init(context: AccountContext, inputData: Signal<StickerPickerInput, NoError>, forceDark: Bool = false, expanded: Bool = false, defaultToEmoji: Bool = false, hasEmoji: Bool = true, hasGifs: Bool = false, hasInteractiveStickers: Bool = true, weather: Signal<StickerPickerScreen.Weather, NoError> = .single(.none)) {
         self.context = context
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         self.theme = forceDark ? defaultDarkColorPresentationTheme : presentationData.theme
@@ -2042,6 +2108,7 @@ public class StickerPickerScreen: ViewController {
         self.hasEmoji = hasEmoji
         self.hasGifs = hasGifs
         self.hasInteractiveStickers = hasInteractiveStickers
+        self.weather = weather
         
         super.init(navigationBarPresentationData: expanded ? NavigationBarPresentationData(presentationData: presentationData) : nil)
         
@@ -2099,27 +2166,33 @@ public class StickerPickerScreen: ViewController {
         
         let navigationHeight: CGFloat = 56.0
         
-        self.node.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: Transition(transition))
+        self.node.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: ComponentTransition(transition))
     }
 }
 
 private final class InteractiveStickerButtonContent: Component {
+    let context: AccountContext
     let theme: PresentationTheme
-    let title: String
-    let iconName: String
+    let title: String?
+    let iconName: String?
+    let iconFile: TelegramMediaFile?
     let useOpaqueTheme: Bool
     weak var tintContainerView: UIView?
 
     public init(
+        context: AccountContext,
         theme: PresentationTheme,
-        title: String,
-        iconName: String,
+        title: String?,
+        iconName: String?,
+        iconFile: TelegramMediaFile? = nil,
         useOpaqueTheme: Bool,
         tintContainerView: UIView
     ) {
+        self.context = context
         self.theme = theme
         self.title = title
         self.iconName = iconName
+        self.iconFile = iconFile
         self.useOpaqueTheme = useOpaqueTheme
         self.tintContainerView = tintContainerView
     }
@@ -2148,6 +2221,7 @@ private final class InteractiveStickerButtonContent: Component {
         private let backgroundLayer = SimpleLayer()
         let tintBackgroundLayer = SimpleLayer()
         
+        private var loadingView: TextLoadingEffectView?
         private var icon: ComponentView<Empty>
         private var title: ComponentView<Empty>
         
@@ -2168,57 +2242,105 @@ private final class InteractiveStickerButtonContent: Component {
             fatalError("init(coder:) has not been implemented")
         }
         
-        func update(component: InteractiveStickerButtonContent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: InteractiveStickerButtonContent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.backgroundLayer.backgroundColor = UIColor(rgb: 0xffffff, alpha: 0.11).cgColor
-            
-            let iconSize = self.icon.update(
-                transition: .immediate,
-                component: AnyComponent(BundleIconComponent(
-                    name: component.iconName,
-                    tintColor: .white,
-                    maxSize: CGSize(width: 20.0, height: 20.0)
-                )),
-                environment: {},
-                containerSize: availableSize
-            )
-            let titleSize = self.title.update(
-                transition: .immediate,
-                component: AnyComponent(Text(
-                    text: component.title.uppercased(),
-                    font: Font.with(size: 23.0, design: .camera),
-                    color: .white
-                )),
-                environment: {},
-                containerSize: availableSize
-            )
-            
-            let padding: CGFloat = 7.0
-            let spacing: CGFloat = 4.0
-            let buttonSize = CGSize(width: padding + iconSize.width + spacing + titleSize.width + padding, height: 34.0)
-            
-            if let view = self.icon.view {
-                if view.superview == nil {
-                    self.addSubview(view)
+              
+            let iconSize: CGSize
+            let buttonSize: CGSize
+            if let title = component.title {
+                if let iconFile = component.iconFile {
+                    iconSize = self.icon.update(
+                        transition: .immediate,
+                        component: AnyComponent(
+                            LottieComponent(
+                                content: LottieComponent.ResourceContent(context: component.context, file: iconFile, attemptSynchronously: true, providesPlaceholder: true),
+                                color: nil,
+                                placeholderColor: UIColor(rgb: 0xffffff, alpha: 0.4),
+                                loop: !["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"].contains(component.iconName ?? "")
+                            )
+                        ),
+                        environment: {},
+                        containerSize: CGSize(width: 20.0, height: 20.0)
+                    )
+                } else {
+                    iconSize = self.icon.update(
+                        transition: .immediate,
+                        component: AnyComponent(BundleIconComponent(
+                            name: component.iconName ?? "",
+                            tintColor: .white,
+                            maxSize: CGSize(width: 20.0, height: 20.0)
+                        )),
+                        environment: {},
+                        containerSize: availableSize
+                    )
                 }
-                transition.setFrame(view: view, frame: CGRect(origin: CGPoint(x: padding, y: floorToScreenPixels((buttonSize.height - iconSize.height) / 2.0)), size: iconSize))
-            }
-            if let view = self.title.view {
-                if view.superview == nil {
-                    self.addSubview(view)
+                let titleSize = self.title.update(
+                    transition: .immediate,
+                    component: AnyComponent(Text(
+                        text: title.uppercased(),
+                        font: Font.with(size: 23.0, design: .camera),
+                        color: .white
+                    )),
+                    environment: {},
+                    containerSize: availableSize
+                )
+                
+                let padding: CGFloat = 7.0
+                let spacing: CGFloat = 4.0
+                buttonSize = CGSize(width: padding + iconSize.width + spacing + titleSize.width + padding, height: 34.0)
+                
+                if let view = self.icon.view {
+                    if view.superview == nil {
+                        self.addSubview(view)
+                    }
+                    transition.setFrame(view: view, frame: CGRect(origin: CGPoint(x: padding, y: floorToScreenPixels((buttonSize.height - iconSize.height) / 2.0)), size: iconSize))
                 }
-                transition.setFrame(view: view, frame: CGRect(origin: CGPoint(x: padding + iconSize.width + spacing, y: floorToScreenPixels((buttonSize.height - titleSize.height) / 2.0)), size: titleSize))
+                if let view = self.title.view {
+                    if view.superview == nil {
+                        self.addSubview(view)
+                    }
+                    transition.setFrame(view: view, frame: CGRect(origin: CGPoint(x: padding + iconSize.width + spacing, y: floorToScreenPixels((buttonSize.height - titleSize.height) / 2.0)), size: titleSize))
+                }
+                
+                if let loadingView = self.loadingView {
+                    self.loadingView = nil
+                    loadingView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.25, removeOnCompletion: false, completion: { _ in
+                        loadingView.removeFromSuperview()
+                    })
+                }
+            } else {
+                buttonSize = CGSize(width: 87.0, height: 34.0)
+                
+                let loadingView: TextLoadingEffectView
+                if let current = self.loadingView {
+                    loadingView = current
+                } else {
+                    loadingView = TextLoadingEffectView()
+                    self.addSubview(loadingView)
+                    self.loadingView = loadingView
+                }
             }
             
             self.backgroundLayer.cornerRadius = 6.0
             self.tintBackgroundLayer.cornerRadius = 6.0
             
-            self.backgroundLayer.frame = CGRect(origin: .zero, size: buttonSize)
+            var transition = transition
+            if self.backgroundLayer.frame.width.isZero {
+                transition = .immediate
+            }
+            transition.setFrame(layer: self.backgroundLayer, frame: CGRect(origin: .zero, size: buttonSize))
             
             if self.tintBackgroundLayer.superlayer == nil, let tintContainerView = component.tintContainerView {
                 Queue.mainQueue().justDispatch {
                     let mappedFrame = self.convert(self.bounds, to: tintContainerView)
-                    self.tintBackgroundLayer.frame = mappedFrame
+                    transition.setFrame(layer: self.tintBackgroundLayer, frame: mappedFrame)
                 }
+            }
+            
+            if let loadingView = self.loadingView {
+                let loadingSize = CGSize(width: buttonSize.width - 18.0, height: 16.0)
+                loadingView.update(color: UIColor.white, rect: CGRect(origin: .zero, size: loadingSize))
+                loadingView.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((buttonSize.width - loadingSize.width) / 2.0), y: floorToScreenPixels((buttonSize.width - loadingSize.width) / 2.0)), size: loadingSize)
             }
             
             return buttonSize
@@ -2229,7 +2351,7 @@ private final class InteractiveStickerButtonContent: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }
@@ -2271,7 +2393,7 @@ private final class InteractiveReactionButtonContent: Component {
             fatalError("init(coder:) has not been implemented")
         }
         
-        func update(component: InteractiveReactionButtonContent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: InteractiveReactionButtonContent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             let bounds = CGRect(origin: .zero, size: CGSize(width: 54.0, height: 54.0))
             let iconSize = self.icon.update(
                 transition: .immediate,
@@ -2299,7 +2421,7 @@ private final class InteractiveReactionButtonContent: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }
@@ -2344,7 +2466,7 @@ private final class RoundVideoButtonContent: Component {
             fatalError("init(coder:) has not been implemented")
         }
         
-        func update(component: RoundVideoButtonContent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: RoundVideoButtonContent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.backgroundLayer.backgroundColor = UIColor(rgb: 0xffffff, alpha: 0.11).cgColor
             
             let bounds = CGRect(origin: .zero, size: CGSize(width: 54.0, height: 54.0))
@@ -2378,7 +2500,7 @@ private final class RoundVideoButtonContent: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }
@@ -2390,12 +2512,14 @@ final class ItemStack<ChildEnvironment: Equatable>: CombinedComponent {
     private let padding: CGFloat
     private let minSpacing: CGFloat
     private let verticalSpacing: CGFloat
+    private let maxHorizontalItems: Int
 
-    init(_ items: [AnyComponentWithIdentity<ChildEnvironment>], padding: CGFloat, minSpacing: CGFloat, verticalSpacing: CGFloat) {
+    init(_ items: [AnyComponentWithIdentity<ChildEnvironment>], padding: CGFloat, minSpacing: CGFloat, verticalSpacing: CGFloat, maxHorizontalItems: Int) {
         self.items = items
         self.padding = padding
         self.minSpacing = minSpacing
         self.verticalSpacing = verticalSpacing
+        self.maxHorizontalItems = maxHorizontalItems
     }
 
     static func ==(lhs: ItemStack<ChildEnvironment>, rhs: ItemStack<ChildEnvironment>) -> Bool {
@@ -2409,6 +2533,9 @@ final class ItemStack<ChildEnvironment: Equatable>: CombinedComponent {
             return false
         }
         if lhs.verticalSpacing != rhs.verticalSpacing {
+            return false
+        }
+        if lhs.maxHorizontalItems != rhs.maxHorizontalItems {
             return false
         }
         return true
@@ -2440,7 +2567,7 @@ final class ItemStack<ChildEnvironment: Equatable>: CombinedComponent {
                 
                 let remainingWidth = context.availableSize.width - itemsWidth - context.component.padding * 2.0
                 let spacing = remainingWidth / CGFloat(rowItemsCount - 1)
-                if spacing < context.component.minSpacing {
+                if spacing < context.component.minSpacing || currentGroup.count == context.component.maxHorizontalItems {
                     groups.append(currentGroup)
                     currentGroup = []
                 }
@@ -2493,91 +2620,227 @@ final class ItemStack<ChildEnvironment: Equatable>: CombinedComponent {
     }
 }
 
-
 final class StoryStickersContentView: UIView, EmojiCustomContentView {
+    private let context: AccountContext
+    
     let tintContainerView = UIView()
-
     private let container = ComponentView<Empty>()
         
+    private var weatherDisposable: Disposable?
+    private var weather: StickerPickerScreen.Weather = .none
+    
     var locationAction: () -> Void = {}
     var audioAction: () -> Void = {}
     var reactionAction: () -> Void = {}
-    var cameraAction: () -> Void = {}
+    var linkAction: () -> Void = {}
+    var weatherAction: () -> Void = {}
+        
+    private var params: (theme: PresentationTheme, strings: PresentationStrings, useOpaqueTheme: Bool, availableSize: CGSize)?
     
-    func update(theme: PresentationTheme, strings: PresentationStrings, useOpaqueTheme: Bool, availableSize: CGSize, transition: Transition) -> CGSize {
+    init(context: AccountContext, weather: Signal<StickerPickerScreen.Weather, NoError>) {
+        self.context = context
+        
+        super.init(frame: .zero)
+                
+        self.weatherDisposable = (weather
+        |> deliverOnMainQueue).start(next: { [weak self] weather in
+            guard let self else {
+                return
+            }
+            self.weather = weather
+            if let (theme, strings, useOpaqueTheme, availableSize) = self.params {
+                let _ = self.update(theme: theme, strings: strings, useOpaqueTheme: useOpaqueTheme, availableSize: availableSize, transition: .easeInOut(duration: 0.25))
+            }
+        })
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    deinit {
+        self.weatherDisposable?.dispose()
+    }
+    
+    func update(theme: PresentationTheme, strings: PresentationStrings, useOpaqueTheme: Bool, availableSize: CGSize, transition: ComponentTransition) -> CGSize {
+        self.params = (theme, strings, useOpaqueTheme, availableSize)
+        
         let padding: CGFloat = 22.0
+        var maxHorizontalItems = 2
+        var items: [AnyComponentWithIdentity<Empty>] = []
+        items.append(
+            AnyComponentWithIdentity(
+                id: "link",
+                component: AnyComponent(
+                    CameraButton(
+                        content: AnyComponentWithIdentity(
+                            id: "content",
+                            component: AnyComponent(
+                                InteractiveStickerButtonContent(
+                                    context: self.context,
+                                    theme: theme,
+                                    title: strings.MediaEditor_AddLink,
+                                    iconName: self.context.isPremium ? "Media Editor/Link" : "Media Editor/LinkLocked",
+                                    useOpaqueTheme: useOpaqueTheme,
+                                    tintContainerView: self.tintContainerView
+                                )
+                            )
+                        ),
+                        action: { [weak self] in
+                            if let self {
+                                self.linkAction()
+                            }
+                        })
+                )
+            )
+        )
+        items.append(
+            AnyComponentWithIdentity(
+                id: "location",
+                component: AnyComponent(
+                    CameraButton(
+                        content: AnyComponentWithIdentity(
+                            id: "content",
+                            component: AnyComponent(
+                                InteractiveStickerButtonContent(
+                                    context: self.context,
+                                    theme: theme,
+                                    title: strings.MediaEditor_AddLocationShort,
+                                    iconName: "Chat/Attach Menu/Location",
+                                    useOpaqueTheme: useOpaqueTheme,
+                                    tintContainerView: self.tintContainerView
+                                )
+                            )
+                        ),
+                        action: { [weak self] in
+                            if let self {
+                                self.locationAction()
+                            }
+                        })
+                )
+            )
+        )
+        
+        if case .none = self.weather {
+            
+        } else {
+            maxHorizontalItems = 3
+            
+            let weatherButtonContent: AnyComponent<Empty>
+            switch self.weather {
+            case .notAllowed, .notDetermined, .notPreloaded:
+                weatherButtonContent = AnyComponent(
+                    InteractiveStickerButtonContent(
+                        context: self.context,
+                        theme: theme,
+                        title: stringForTemperature(24),
+                        iconName: "☀️",
+                        iconFile: self.context.animatedEmojiStickersValue["☀️"]?.first?.file,
+                        useOpaqueTheme: useOpaqueTheme,
+                        tintContainerView: self.tintContainerView
+                    )
+                )
+            case let .loaded(weather):
+                weatherButtonContent = AnyComponent(
+                    InteractiveStickerButtonContent(
+                        context: self.context,
+                        theme: theme,
+                        title: stringForTemperature(weather.temperature),
+                        iconName: weather.emoji,
+                        iconFile: weather.emojiFile,
+                        useOpaqueTheme: useOpaqueTheme,
+                        tintContainerView: self.tintContainerView
+                    )
+                )
+            case .fetching:
+                weatherButtonContent = AnyComponent(
+                    InteractiveStickerButtonContent(
+                        context: self.context,
+                        theme: theme,
+                        title: nil,
+                        iconName: nil,
+                        useOpaqueTheme: useOpaqueTheme,
+                        tintContainerView: self.tintContainerView
+                    )
+                )
+            default:
+                fatalError()
+            }
+            items.append(
+                AnyComponentWithIdentity(
+                    id: "weather",
+                    component: AnyComponent(
+                        CameraButton(
+                            content: AnyComponentWithIdentity(
+                                id: "weather",
+                                component: weatherButtonContent
+                            ),
+                            action: { [weak self] in
+                                if let self {
+                                    self.weatherAction()
+                                }
+                            })
+                    )
+                )
+            )
+        }
+        
+        items.append(
+            AnyComponentWithIdentity(
+                id: "audio",
+                component: AnyComponent(
+                    CameraButton(
+                        content: AnyComponentWithIdentity(
+                            id: "audio",
+                            component: AnyComponent(
+                                InteractiveStickerButtonContent(
+                                    context: self.context,
+                                    theme: theme,
+                                    title: strings.MediaEditor_AddAudio,
+                                    iconName: "Media Editor/Audio",
+                                    useOpaqueTheme: useOpaqueTheme,
+                                    tintContainerView: self.tintContainerView
+                                )
+                            )
+                        ),
+                        action: { [weak self] in
+                            if let self {
+                                self.audioAction()
+                            }
+                        })
+                )
+            )
+        )
+        
+        items.append(
+            AnyComponentWithIdentity(
+                id: "reaction",
+                component: AnyComponent(
+                    CameraButton(
+                        content: AnyComponentWithIdentity(
+                            id: "reaction",
+                            component: AnyComponent(
+                                InteractiveReactionButtonContent(theme: theme)
+                            )
+                        ),
+                        action: { [weak self] in
+                            if let self {
+                                self.reactionAction()
+                            }
+                        })
+                )
+            )
+        )
+        
         let size = self.container.update(
             transition: transition,
             component: AnyComponent(
                 ItemStack(
-                    [
-                        AnyComponentWithIdentity(
-                            id: "location",
-                            component: AnyComponent(
-                                CameraButton(
-                                    content: AnyComponentWithIdentity(
-                                        id: "content",
-                                        component: AnyComponent(
-                                            InteractiveStickerButtonContent(
-                                                theme: theme,
-                                                title: strings.MediaEditor_AddLocationShort,
-                                                iconName: "Chat/Attach Menu/Location",
-                                                useOpaqueTheme: useOpaqueTheme,
-                                                tintContainerView: self.tintContainerView
-                                            )
-                                        )
-                                    ),
-                                    action: { [weak self] in
-                                        if let self {
-                                            self.locationAction()
-                                        }
-                                    })
-                            )
-                        ),
-                        AnyComponentWithIdentity(
-                            id: "audio",
-                            component: AnyComponent(
-                                CameraButton(
-                                    content: AnyComponentWithIdentity(
-                                        id: "audio",
-                                        component: AnyComponent(
-                                            InteractiveStickerButtonContent(
-                                                theme: theme,
-                                                title: strings.MediaEditor_AddAudio,
-                                                iconName: "Media Editor/Audio",
-                                                useOpaqueTheme: useOpaqueTheme,
-                                                tintContainerView: self.tintContainerView
-                                            )
-                                        )
-                                    ),
-                                    action: { [weak self] in
-                                        if let self {
-                                            self.audioAction()
-                                        }
-                                    })
-                            )
-                        ),
-                        AnyComponentWithIdentity(
-                            id: "reaction",
-                            component: AnyComponent(
-                                CameraButton(
-                                    content: AnyComponentWithIdentity(
-                                        id: "reaction",
-                                        component: AnyComponent(
-                                            InteractiveReactionButtonContent(theme: theme)
-                                        )
-                                    ),
-                                    action: { [weak self] in
-                                        if let self {
-                                            self.reactionAction()
-                                        }
-                                    })
-                            )
-                        )
-                    ],
+                    items,
                     padding: 18.0,
                     minSpacing: 8.0,
-                    verticalSpacing: 12.0
+                    verticalSpacing: 12.0,
+                    maxHorizontalItems: maxHorizontalItems
                 )
             ),
             environment: {},

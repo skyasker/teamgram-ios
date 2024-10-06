@@ -847,7 +847,12 @@ private final class CameraScreenComponent: CombinedComponent {
                     .position(CGPoint(x: context.availableSize.width / 2.0, y: context.availableSize.height / 2.0))
                     .scale(1.5 - component.cameraState.flashTintSize * 0.5)
                     .appear(.default(alpha: true))
-                    .disappear(.default(alpha: true))
+                    .disappear(ComponentTransition.Disappear({ view, transition, completion in
+                        view.superview?.sendSubviewToBack(view)
+                        transition.setAlpha(view: view, alpha: 0.0, completion: { _ in
+                            completion()
+                        })
+                    }))
                 )
                 
                 if !state.isTakingPhoto {
@@ -1391,15 +1396,18 @@ public class CameraScreen: ViewController {
         public weak var destinationView: UIView?
         public let destinationRect: CGRect
         public let destinationCornerRadius: CGFloat
+        public let completion: (() -> Void)?
         
         public init(
             destinationView: UIView,
             destinationRect: CGRect,
-            destinationCornerRadius: CGFloat
+            destinationCornerRadius: CGFloat,
+            completion: (() -> Void)? = nil
         ) {
             self.destinationView = destinationView
             self.destinationRect = destinationRect
             self.destinationCornerRadius = destinationCornerRadius
+            self.completion = completion
         }
     }
 
@@ -1534,6 +1542,9 @@ public class CameraScreen: ViewController {
                 if let isDualCameraEnabledValue = UserDefaults.standard.object(forKey: "TelegramStoryCameraIsDualEnabled") as? NSNumber {
                     isDualCameraEnabled = isDualCameraEnabledValue.boolValue
                 }
+            }
+            if case .sticker = controller.mode {
+                isDualCameraEnabled = false
             }
             
             var dualCameraPosition: PIPPosition = .topRight
@@ -2177,9 +2188,12 @@ public class CameraScreen: ViewController {
                 let destinationLocalFrame = destinationView.convert(transitionOut.destinationRect, to: self.view)
                 let targetScale = destinationLocalFrame.width / self.previewContainerView.frame.width
                 
+                let transitionOutCompletion = transitionOut.completion
+                
                 if case .story = controller.mode {
                     self.previewContainerView.layer.animatePosition(from: self.previewContainerView.center, to: destinationLocalFrame.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, completion: { _ in
                         completion()
+                        transitionOutCompletion?()
                     })
                     self.previewContainerView.layer.animateScale(from: 1.0, to: targetScale, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
                     
@@ -2203,6 +2217,7 @@ public class CameraScreen: ViewController {
                     self.mainPreviewAnimationWrapperView.center = destinationInnerFrame.center
                     self.mainPreviewAnimationWrapperView.layer.animatePosition(from: initialCenter, to: self.mainPreviewAnimationWrapperView.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, completion: { _ in
                         completion()
+                        transitionOutCompletion?()
                     })
                     
                     var targetBounds = self.mainPreviewView.bounds
@@ -2235,7 +2250,7 @@ public class CameraScreen: ViewController {
             self.cameraIsActive = false
             self.requestUpdateLayout(hasAppeared: self.hasAppeared, transition: .immediate)
             
-            let transition = Transition(animation: .curve(duration: 0.2, curve: .easeInOut))
+            let transition = ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut))
             if let view = self.componentHost.findTaggedView(tag: cancelButtonTag) {
                 view.layer.animateScale(from: 1.0, to: 0.1, duration: 0.2)
                 transition.setAlpha(view: view, alpha: 0.0)
@@ -2313,7 +2328,7 @@ public class CameraScreen: ViewController {
                 self.cameraIsActive = true
                 self.requestUpdateLayout(hasAppeared: self.hasAppeared, transition: .immediate)
                 
-                let transition = Transition(animation: .curve(duration: 0.2, curve: .easeInOut))
+                let transition = ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut))
                 if let view = self.componentHost.findTaggedView(tag: cancelButtonTag) {
                     view.layer.animateScale(from: 0.1, to: 1.0, duration: 0.2)
                     transition.setAlpha(view: view, alpha: 1.0)
@@ -2466,14 +2481,14 @@ public class CameraScreen: ViewController {
             return result
         }
         
-        func requestUpdateLayout(hasAppeared: Bool, transition: Transition) {
+        func requestUpdateLayout(hasAppeared: Bool, transition: ComponentTransition) {
             if let layout = self.validLayout {
                 self.containerLayoutUpdated(layout: layout, forceUpdate: true, hasAppeared: hasAppeared, transition: transition)
             }
         }
 
         fileprivate var hasAppeared = false
-        func containerLayoutUpdated(layout: ContainerViewLayout, forceUpdate: Bool = false, hasAppeared: Bool = false, transition: Transition) {
+        func containerLayoutUpdated(layout: ContainerViewLayout, forceUpdate: Bool = false, hasAppeared: Bool = false, transition: ComponentTransition) {
             guard let controller = self.controller else {
                 return
             }
@@ -2808,7 +2823,7 @@ public class CameraScreen: ViewController {
     
     public var isEmbedded = false
     
-    fileprivate func updateCameraState(_ f: (CameraState) -> CameraState, transition: Transition) {
+    fileprivate func updateCameraState(_ f: (CameraState) -> CameraState, transition: ComponentTransition) {
         self.node.cameraState = f(self.node.cameraState)
         self.node.requestUpdateLayout(hasAppeared: self.node.hasAppeared, transition: transition)
     }
@@ -2974,7 +2989,7 @@ public class CameraScreen: ViewController {
         if let current = self.galleryController {
             controller = current
         } else {
-            controller = self.context.sharedContext.makeStoryMediaPickerScreen(context: self.context, getSourceRect: { [weak self] in
+            controller = self.context.sharedContext.makeStoryMediaPickerScreen(context: self.context, isDark: true, getSourceRect: { [weak self] in
                 if let self {
                     if let galleryButton = self.node.componentHost.findTaggedView(tag: galleryButtonTag) {
                         return galleryButton.convert(galleryButton.bounds, to: self.view).offsetBy(dx: 0.0, dy: -15.0)
@@ -3211,7 +3226,7 @@ public class CameraScreen: ViewController {
         super.containerLayoutUpdated(layout, transition: transition)
 
         if !self.isDismissed {
-            (self.displayNode as! Node).containerLayoutUpdated(layout: layout, transition: Transition(transition))
+            (self.displayNode as! Node).containerLayoutUpdated(layout: layout, transition: ComponentTransition(transition))
         }
     }
 }
@@ -3284,7 +3299,7 @@ private final class DualIconComponent: Component {
             fatalError("init(coder:) has not been implemented")
         }
                 
-        func update(component: DualIconComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: Transition) -> CGSize {
+        func update(component: DualIconComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
             self.component = component
             self.state = state
                         
@@ -3302,7 +3317,7 @@ private final class DualIconComponent: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: State, environment: Environment<EnvironmentType>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: State, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }

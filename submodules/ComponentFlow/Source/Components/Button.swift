@@ -9,7 +9,7 @@ public final class Button: Component {
     public let isEnabled: Bool
     public let isExclusive: Bool
     public let action: () -> Void
-    public let holdAction: (() -> Void)?
+    public let holdAction: ((UIView) -> Void)?
     public let highlightedAction: ActionSlot<Bool>?
 
     convenience public init(
@@ -39,7 +39,7 @@ public final class Button: Component {
         isEnabled: Bool = true,
         isExclusive: Bool = true,
         action: @escaping () -> Void,
-        holdAction: (() -> Void)?,
+        holdAction: ((UIView) -> Void)?,
         highlightedAction: ActionSlot<Bool>?
     ) {
         self.content = content
@@ -82,7 +82,7 @@ public final class Button: Component {
     }
     
     
-    public func withHoldAction(_ holdAction: (() -> Void)?) -> Button {
+    public func withHoldAction(_ holdAction: ((UIView) -> Void)?) -> Button {
         return Button(
             content: self.content,
             minSize: self.minSize,
@@ -154,7 +154,7 @@ public final class Button: Component {
             }
         }
         
-        private func updateAlpha(transition: Transition) {
+        private func updateAlpha(transition: ComponentTransition) {
             guard let component = self.component else {
                 return
             }
@@ -228,7 +228,7 @@ public final class Button: Component {
                             return
                         }
                         strongSelf.holdActionTimer?.invalidate()
-                        strongSelf.component?.holdAction?()
+                        strongSelf.component?.holdAction?(strongSelf)
                         strongSelf.beginExecuteHoldActionTimer()
                     })
                     self.holdActionTimer = holdActionTimer
@@ -246,7 +246,7 @@ public final class Button: Component {
                     guard let strongSelf = self else {
                         return
                     }
-                    strongSelf.component?.holdAction?()
+                    strongSelf.component?.holdAction?(strongSelf)
                 })
                 self.holdActionTimer = holdActionTimer
                 RunLoop.main.add(holdActionTimer, forMode: .common)
@@ -271,7 +271,7 @@ public final class Button: Component {
             super.cancelTracking(with: event)
         }
         
-        func update(component: Button, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: Button, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             let contentSize = self.contentView.update(
                 transition: transition,
                 component: component.content,
@@ -301,7 +301,7 @@ public final class Button: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }

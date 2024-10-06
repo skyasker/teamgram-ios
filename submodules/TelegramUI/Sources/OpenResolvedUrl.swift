@@ -34,6 +34,7 @@ import StoryContainerScreen
 import WallpaperGalleryScreen
 import TelegramStringFormatting
 import TextFormat
+import BrowserUI
 
 private func defaultNavigationForPeerId(_ peerId: PeerId?, navigation: ChatControllerInteractionNavigateToPeer) -> ChatControllerInteractionNavigateToPeer {
     if case .default = navigation {
@@ -60,6 +61,7 @@ func openResolvedUrlImpl(
     openPeer: @escaping (EnginePeer, ChatControllerInteractionNavigateToPeer) -> Void,
     sendFile: ((FileMediaReference) -> Void)?,
     sendSticker: ((FileMediaReference, UIView, CGRect) -> Bool)?,
+    sendEmoji: ((String, ChatTextInputTextCustomEmojiAttribute) -> Void)?,
     requestMessageActionUrlAuth: ((MessageActionUrlSubject) -> Void)? = nil,
     joinVoiceChat: ((PeerId, String?, CachedChannelData.ActiveCall) -> Void)?,
     present: @escaping (ViewController, Any?) -> Void,
@@ -206,7 +208,7 @@ func openResolvedUrlImpl(
             dismissInput()
             navigationController?.pushViewController(controller)
         case let .channelMessage(peer, messageId, timecode):
-            openPeer(EnginePeer(peer), .chat(textInputState: nil, subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: timecode), peekData: nil))
+            openPeer(EnginePeer(peer), .chat(textInputState: nil, subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: timecode, setupReply: false), peekData: nil))
         case let .replyThreadMessage(replyThreadMessage, messageId):
             if let navigationController = navigationController, let effectiveMessageId = replyThreadMessage.effectiveMessageId {
                 let _ = ChatControllerImpl.openMessageReplies(context: context, navigationController: navigationController, present: { c, a in
@@ -215,12 +217,12 @@ func openResolvedUrlImpl(
             }
         case let .replyThread(messageId):
             if let navigationController = navigationController {
-                let _ = context.sharedContext.navigateToForumThread(context: context, peerId: messageId.peerId, threadId: Int64(messageId.id), messageId: nil, navigationController: navigationController, activateInput: nil, keepStack: .always).startStandalone()
+                let _ = context.sharedContext.navigateToForumThread(context: context, peerId: messageId.peerId, threadId: Int64(messageId.id), messageId: nil, navigationController: navigationController, activateInput: nil, scrollToEndIfExists: false, keepStack: .always).startStandalone()
             }
         case let .stickerPack(name, _):
             dismissInput()
 
-            let controller = StickerPackScreen(context: context, updatedPresentationData: updatedPresentationData, mainStickerPack: .name(name), stickerPacks: [.name(name)], parentNavigationController: navigationController, sendSticker: sendSticker, actionPerformed: { actions in
+            let controller = StickerPackScreen(context: context, updatedPresentationData: updatedPresentationData, mainStickerPack: .name(name), stickerPacks: [.name(name)], parentNavigationController: navigationController, sendSticker: sendSticker, sendEmoji: sendEmoji, actionPerformed: { actions in
                 if actions.count > 1, let first = actions.first {
                     if case .add = first.2 {
                         present(UndoOverlayController(presentationData: presentationData, content: .stickersModified(title: presentationData.strings.EmojiPackActionInfo_AddedTitle, text: presentationData.strings.EmojiPackActionInfo_MultipleAddedText(Int32(actions.count)), undo: false, info: first.0, topItem: first.1.first, context: context), elevatedLayout: true, animateInAsReplacement: false, action: { _ in
@@ -232,11 +234,11 @@ func openResolvedUrlImpl(
                     
                     switch action {
                     case .add:
-                        present(UndoOverlayController(presentationData: presentationData, content: .stickersModified(title: isEmoji ? presentationData.strings.EmojiPackActionInfo_AddedTitle : presentationData.strings.StickerPackActionInfo_AddedTitle, text: isEmoji ? presentationData.strings.EmojiPackActionInfo_AddedText(info.title).string : presentationData.strings.StickerPackActionInfo_AddedText(info.title).string, undo: false, info: info, topItem: items.first, context: context), elevatedLayout: true, animateInAsReplacement: false, action: { _ in
+                        present(UndoOverlayController(presentationData: presentationData, content: .stickersModified(title: isEmoji ? presentationData.strings.EmojiPackActionInfo_AddedTitle : presentationData.strings.StickerPackActionInfo_AddedTitle, text: isEmoji ? presentationData.strings.EmojiPackActionInfo_AddedText(info.title).string : presentationData.strings.StickerPackActionInfo_AddedText(info.title).string, undo: false, info: info, topItem: items.first, context: context), elevatedLayout: false, animateInAsReplacement: false, action: { _ in
                             return true
                         }), nil)
                     case let .remove(positionInList):
-                        present(UndoOverlayController(presentationData: presentationData, content: .stickersModified(title: isEmoji ? presentationData.strings.EmojiPackActionInfo_RemovedTitle : presentationData.strings.StickerPackActionInfo_RemovedTitle, text: isEmoji ? presentationData.strings.EmojiPackActionInfo_RemovedText(info.title).string : presentationData.strings.StickerPackActionInfo_RemovedText(info.title).string, undo: true, info: info, topItem: items.first, context: context), elevatedLayout: true, animateInAsReplacement: false, action: { action in
+                        present(UndoOverlayController(presentationData: presentationData, content: .stickersModified(title: isEmoji ? presentationData.strings.EmojiPackActionInfo_RemovedTitle : presentationData.strings.StickerPackActionInfo_RemovedTitle, text: isEmoji ? presentationData.strings.EmojiPackActionInfo_RemovedText(info.title).string : presentationData.strings.StickerPackActionInfo_RemovedText(info.title).string, undo: true, info: info, topItem: items.first, context: context), elevatedLayout: false, animateInAsReplacement: false, action: { action in
                             if case .undo = action {
                                 let _ = context.engine.stickers.addStickerPackInteractively(info: info, items: items, positionInList: positionInList).startStandalone()
                             }
@@ -246,13 +248,102 @@ func openResolvedUrlImpl(
                 }
             })
                 present(controller, nil)
-        case let .instantView(webpage, anchor):
-            navigationController?.pushViewController(InstantPageController(context: context, webPage: webpage, sourceLocation: InstantPageSourceLocation(userLocation: .other, peerType: .channel), anchor: anchor))
+        case let .instantView(webPage, anchor):
+            let sourceLocation = InstantPageSourceLocation(userLocation: .other, peerType: .channel)
+            let browserController = context.sharedContext.makeInstantPageController(context: context, webPage: webPage, anchor: anchor, sourceLocation: sourceLocation)
+            navigationController?.pushViewController(browserController)
         case let .join(link):
             dismissInput()
-            present(JoinLinkPreviewController(context: context, link: link, navigateToPeer: { peer, peekData in
-                openPeer(peer, .chat(textInputState: nil, subject: nil, peekData: peekData))
-            }, parentNavigationController: navigationController), nil)
+        
+            if let progress {
+                let progressSignal = Signal<Never, NoError> { subscriber in
+                    progress.set(.single(true))
+                    return ActionDisposable {
+                        Queue.mainQueue().async() {
+                            progress.set(.single(false))
+                        }
+                    }
+                }
+                |> runOn(Queue.mainQueue())
+                |> delay(0.1, queue: Queue.mainQueue())
+                let progressDisposable = progressSignal.startStrict()
+                
+                var signal = context.engine.peers.joinLinkInformation(link)
+                signal = signal
+                |> afterDisposed {
+                    Queue.mainQueue().async {
+                        progressDisposable.dispose()
+                    }
+                }
+            
+                let _ = (signal
+                |> deliverOnMainQueue).startStandalone(next: { [weak navigationController] resolvedState in
+                    switch resolvedState {
+                    case let .alreadyJoined(peer):
+                        openPeer(peer, .chat(textInputState: nil, subject: nil, peekData: nil))
+                    case let .peek(peer, deadline):
+                        openPeer(peer, .chat(textInputState: nil, subject: nil, peekData: ChatPeekTimeout(deadline: deadline, linkData: link)))
+                    case let .invite(invite):
+                        if let subscriptionPricing = invite.subscriptionPricing, let subscriptionFormId = invite.subscriptionFormId, let starsContext = context.starsContext {
+                            let inputData = Promise<BotCheckoutController.InputData?>()
+                            var photo: [TelegramMediaImageRepresentation] = []
+                            if let photoRepresentation = invite.photoRepresentation {
+                                photo.append(photoRepresentation)
+                            }
+                            let channel = TelegramChannel(id: PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value(0)), accessHash: .genericPublic(0), title: invite.title, username: nil, photo: photo, creationDate: 0, version: 0, participationStatus: .left, info: .broadcast(TelegramChannelBroadcastInfo(flags: [])), flags: [], restrictionInfo: nil, adminRights: nil, bannedRights: nil, defaultBannedRights: nil, usernames: [], storiesHidden: nil, nameColor: invite.nameColor, backgroundEmojiId: nil, profileColor: nil, profileBackgroundEmojiId: nil, emojiStatus: nil, approximateBoostLevel: nil, subscriptionUntilDate: nil)
+                            let invoice = TelegramMediaInvoice(title: "", description: "", photo: nil, receiptMessageId: nil, currency: "XTR", totalAmount: subscriptionPricing.amount, startParam: "", extendedMedia: nil, flags: [], version: 0)
+                            
+                            inputData.set(.single(BotCheckoutController.InputData(
+                                form: BotPaymentForm(
+                                    id: subscriptionFormId,
+                                    canSaveCredentials: false,
+                                    passwordMissing: false,
+                                    invoice: BotPaymentInvoice(isTest: false, requestedFields: [], currency: "XTR", prices: [BotPaymentPrice(label: "", amount: subscriptionPricing.amount)], tip: nil, termsInfo: nil),
+                                    paymentBotId: channel.id,
+                                    providerId: nil,
+                                    url: nil,
+                                    nativeProvider: nil,
+                                    savedInfo: nil,
+                                    savedCredentials: [],
+                                    additionalPaymentMethods: []
+                                ),
+                                validatedFormInfo: nil,
+                                botPeer: EnginePeer(channel)
+                            )))
+                            
+                            let starsInputData = combineLatest(
+                                inputData.get(),
+                                starsContext.state
+                            )
+                            |> map { data, state -> (StarsContext.State, BotPaymentForm, EnginePeer?, EnginePeer?)? in
+                                if let data, let state {
+                                    return (state, data.form, data.botPeer, nil)
+                                } else {
+                                    return nil
+                                }
+                            }
+                            let _ = (starsInputData |> filter { $0 != nil } |> take(1) |> deliverOnMainQueue).start(next: { _ in
+                                let controller = context.sharedContext.makeStarsSubscriptionTransferScreen(context: context, starsContext: starsContext, invoice: invoice, link: link, inputData: starsInputData, navigateToPeer: { peer in
+                                    openPeer(peer, .chat(textInputState: nil, subject: nil, peekData: nil))
+                                })
+                                navigationController?.pushViewController(controller)
+                            })
+                        } else {
+                            present(JoinLinkPreviewController(context: context, link: link, navigateToPeer: { peer, peekData in
+                                openPeer(peer, .chat(textInputState: nil, subject: nil, peekData: peekData))
+                            }, parentNavigationController: navigationController, resolvedState: resolvedState), nil)
+                        }
+                    default:
+                        present(JoinLinkPreviewController(context: context, link: link, navigateToPeer: { peer, peekData in
+                            openPeer(peer, .chat(textInputState: nil, subject: nil, peekData: peekData))
+                        }, parentNavigationController: navigationController, resolvedState: resolvedState), nil)
+                    }
+                })
+            } else {
+                present(JoinLinkPreviewController(context: context, link: link, navigateToPeer: { peer, peekData in
+                    openPeer(peer, .chat(textInputState: nil, subject: nil, peekData: peekData))
+                }, parentNavigationController: navigationController), nil)
+            }
         case let .localization(identifier):
             dismissInput()
             present(LanguageLinkPreviewController(context: context, identifier: identifier), nil)
@@ -615,6 +706,40 @@ func openResolvedUrlImpl(
             if let navigationController = navigationController {
                 navigationController.pushViewController(controller, animated: true)
             }
+        case let .starsTopup(amount, purpose):
+            dismissInput()
+            if let starsContext = context.starsContext {
+                let proceed = {
+                    let controller = context.sharedContext.makeStarsPurchaseScreen(context: context, starsContext: starsContext, options: [], purpose: .topUp(requiredStars: amount, purpose: purpose), completion: { _ in })
+                    if let navigationController = navigationController {
+                        navigationController.pushViewController(controller, animated: true)
+                    }
+                }
+                if let currentState = starsContext.currentState, currentState.balance >= amount {
+                    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                    let controller = UndoOverlayController(
+                        presentationData: presentationData,
+                        content: .universal(
+                            animation: "StarsBuy",
+                            scale: 0.066,
+                            colors: [:],
+                            title: nil,
+                            text: "You have enough stars at the moment.",
+                            customUndoText: "Buy Anyway",
+                            timeout: nil
+                        ),
+                        elevatedLayout: true,
+                        action: { action in
+                            if case .undo = action {
+                                proceed()
+                            }
+                            return true
+                        })
+                    present(controller, nil)
+                } else {
+                    proceed()
+                }
+            }
         case let .joinVoiceChat(peerId, invite):
             let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
             |> deliverOnMainQueue).start(next: { peer in
@@ -782,25 +907,43 @@ func openResolvedUrlImpl(
                 if let navigationController = navigationController {
                     let inputData = Promise<BotCheckoutController.InputData?>()
                     inputData.set(BotCheckoutController.InputData.fetch(context: context, source: .slug(slug))
-                                  |> map(Optional.init)
-                                  |> `catch` { _ -> Signal<BotCheckoutController.InputData?, NoError> in
+                    |> map(Optional.init)
+                    |> `catch` { _ -> Signal<BotCheckoutController.InputData?, NoError> in
                         return .single(nil)
                     })
-                    let checkoutController = BotCheckoutController(context: context, invoice: invoice, source: .slug(slug), inputData: inputData, completed: { currencyValue, receiptMessageId in
-                        /*strongSelf.present(UndoOverlayController(presentationData: strongSelf.presentationData, content: .paymentSent(currencyValue: currencyValue, itemTitle: invoice.title), elevatedLayout: false, action: { action in
-                         guard let strongSelf = self, let receiptMessageId = receiptMessageId else {
-                         return false
-                         }
-                         
-                         if case .info = action {
-                         strongSelf.present(BotReceiptController(context: strongSelf.context, messageId: receiptMessageId), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
-                         return true
-                         }
-                         return false
-                         }), in: .current)*/
-                    })
-                    checkoutController.navigationPresentation = .modal
-                    navigationController.pushViewController(checkoutController)
+                    if invoice.currency == "XTR", let starsContext = context.starsContext {
+                        let starsInputData = combineLatest(
+                            inputData.get(),
+                            starsContext.state
+                        )
+                        |> map { data, state -> (StarsContext.State, BotPaymentForm, EnginePeer?, EnginePeer?)? in
+                            if let data, let state {
+                                return (state, data.form, data.botPeer, nil)
+                            } else {
+                                return nil
+                            }
+                        }
+                        let _ = (starsInputData |> filter { $0 != nil } |> take(1) |> deliverOnMainQueue).start(next: { _ in
+                            let controller = context.sharedContext.makeStarsTransferScreen(context: context, starsContext: starsContext, invoice: invoice, source: .slug(slug), extendedMedia: [], inputData: starsInputData, completion: { _ in })
+                            navigationController.pushViewController(controller)
+                        })
+                    } else {
+                        let checkoutController = BotCheckoutController(context: context, invoice: invoice, source: .slug(slug), inputData: inputData, completed: { currencyValue, receiptMessageId in
+                            /*strongSelf.present(UndoOverlayController(presentationData: strongSelf.presentationData, content: .paymentSent(currencyValue: currencyValue, itemTitle: invoice.title), elevatedLayout: false, action: { action in
+                             guard let strongSelf = self, let receiptMessageId = receiptMessageId else {
+                             return false
+                             }
+                             
+                             if case .info = action {
+                             strongSelf.present(BotReceiptController(context: strongSelf.context, messageId: receiptMessageId), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
+                             return true
+                             }
+                             return false
+                             }), in: .current)*/
+                        })
+                        checkoutController.navigationPresentation = .modal
+                        navigationController.pushViewController(checkoutController)
+                    }
                 }
             } else {
                 present(textAlertController(context: context, updatedPresentationData: updatedPresentationData, title: nil, text: presentationData.strings.Chat_ErrorInvoiceNotFound, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
@@ -1016,11 +1159,11 @@ func openResolvedUrlImpl(
                             },
                             openMessage: { messageId in
                                 let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: messageId.peerId))
-                                         |> deliverOnMainQueue).startStandalone(next: { peer in
+                                |> deliverOnMainQueue).startStandalone(next: { peer in
                                     guard let peer else {
                                         return
                                     }
-                                    openPeer(peer, .chat(textInputState: nil, subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil), peekData: nil))
+                                    openPeer(peer, .chat(textInputState: nil, subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false), peekData: nil))
                                     if case let .chat(peerId, _, _) = urlContext, peerId == messageId.peerId {
                                         dismissImpl?()
                                     }

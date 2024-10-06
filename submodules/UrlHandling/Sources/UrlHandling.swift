@@ -71,10 +71,11 @@ public enum ParsedInternalPeerUrlParameter {
     case channelMessage(Int32, Double?)
     case replyThread(Int32, Int32)
     case voiceChat(String?)
-    case appStart(String, String?)
+    case appStart(String, String?, Bool)
     case story(Int32)
     case boost
     case text(String)
+    case profile
 }
 
 public enum ParsedInternalUrl {
@@ -130,10 +131,8 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
         if !pathComponents.isEmpty && !pathComponents[0].isEmpty {
             let peerName: String = pathComponents[0]
             
-            if sharedContext.immediateExperimentalUISettings.browserExperiment {
-                if query.hasPrefix("ipfs/") {
-                    return .externalUrl(url: "ipfs://" + String(query[query.index(query.startIndex, offsetBy: "ipfs/".count)...]))
-                }
+            if query.hasPrefix("tonsite/") {
+                return .externalUrl(url: "tonsite://" + String(query[query.index(query.startIndex, offsetBy: "tonsite/".count)...]))
             }
             
             if pathComponents[0].hasPrefix("+") || pathComponents[0].hasPrefix("%20") {
@@ -232,7 +231,7 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
                         if let phone = phone, let hash = hash {
                             return .cancelAccountReset(phone: phone, hash: hash)
                         }
-                    } else if peerName == "msg" {
+                    } else if peerName == "msg" || peerName == "share" {
                         var url: String?
                         var text: String?
                         var to: String?
@@ -242,7 +241,7 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
                                     url = value
                                 } else if queryItem.name == "text" {
                                     text = value
-                                } else if queryItem.name == "to" {
+                                } else if queryItem.name == "to" && peerName != "share" {
                                     to = value
                                 }
                             }
@@ -250,7 +249,7 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
                         return .share(url: url, text: text, to: to)
                     } else if peerName == "boost" {
                         for queryItem in queryItems {
-                            if queryItem.name == "c", let value = queryItem.value, let channelId = Int64(value) {
+                            if queryItem.name == "c", let value = queryItem.value, let channelId = Int64(value), channelId > 0 {
                                 let peerId = PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value(channelId))
                                 return .peer(.id(peerId), .boost)
                             }
@@ -293,7 +292,20 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
                                         }
                                     }
                                     return .startAttach(peerName, value, choose)
-                                } else if queryItem.name == "story" {
+                                 } else if queryItem.name == "startapp" {
+                                     var compact = false
+                                     if let queryItems = components.queryItems {
+                                         for queryItem in queryItems {
+                                             if let value = queryItem.value {
+                                                 if queryItem.name == "mode", value == "compact" {
+                                                     compact = true
+                                                     break
+                                                 }
+                                             }
+                                         }
+                                     }
+                                     return .peer(.name(peerName), .appStart("", queryItem.value, compact))
+                                 } else if queryItem.name == "story" {
                                     if let id = Int32(value) {
                                         return .peer(.name(peerName), .story(id))
                                     }
@@ -320,6 +332,21 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
                                 return .peer(.name(peerName), .groupBotStart("", botAdminRights))
                             } else if queryItem.name == "boost" {
                                 return .peer(.name(peerName), .boost)
+                            } else if queryItem.name == "profile" {
+                                return .peer(.name(peerName), .profile)
+                            } else if queryItem.name == "startapp" {
+                                var compact = false
+                                if let queryItems = components.queryItems {
+                                    for queryItem in queryItems {
+                                        if let value = queryItem.value {
+                                            if queryItem.name == "mode", value == "compact" {
+                                                compact = true
+                                                break
+                                            }
+                                        }
+                                    }
+                                }
+                                return .peer(.name(peerName), .appStart("", nil, compact))
                             }
                         }
                     }
@@ -475,7 +502,7 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
                 } else if pathComponents[0] == "m" {
                     return .messageLink(slug: pathComponents[1])
                 } else if pathComponents.count == 3 && pathComponents[0] == "c" {
-                    if let channelId = Int64(pathComponents[1]), let messageId = Int32(pathComponents[2]) {
+                    if let channelId = Int64(pathComponents[1]), let messageId = Int32(pathComponents[2]), channelId > 0 {
                         var threadId: Int32?
                         var timecode: Double?
                         if let queryItems = components.queryItems {
@@ -504,7 +531,7 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
                         return nil
                     }
                 } else if pathComponents.count == 4 && pathComponents[0] == "c" {
-                    if let channelId = Int64(pathComponents[1]), let threadId = Int32(pathComponents[2]), let messageId = Int32(pathComponents[3]) {
+                    if let channelId = Int64(pathComponents[1]),  let threadId = Int32(pathComponents[2]), let messageId = Int32(pathComponents[3]), channelId > 0 {
                         var timecode: Double?
                         if let queryItems = components.queryItems {
                             for queryItem in queryItems {
@@ -522,7 +549,7 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
                         return nil
                     }
                 } else if pathComponents.count == 2 && pathComponents[0] == "c" {
-                    if let channelId = Int64(pathComponents[1]) {
+                    if let channelId = Int64(pathComponents[1]), channelId > 0 {
                         var threadId: Int32?
                         var boost: Bool = false
                         if let queryItems = components.queryItems {
@@ -588,16 +615,19 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, query: String)
                 } else if pathComponents.count == 2 {
                     let appName = pathComponents[1]
                     var startApp: String?
+                    var compact = false
                     if let queryItems = components.queryItems {
                         for queryItem in queryItems {
                             if let value = queryItem.value {
                                 if queryItem.name == "startapp" {
                                     startApp = value
+                                } else if queryItem.name == "mode", value == "compact" {
+                                    compact = true
                                 }
                             }
                         }
                     }
-                    return .peer(.name(peerName), .appStart(appName, startApp))
+                    return .peer(.name(peerName), .appStart(appName, startApp, compact))
                 } else {
                     return nil
                 }
@@ -687,6 +717,8 @@ private func resolveInternalUrl(context: AccountContext, url: ParsedInternalUrl)
                 if let peer = peer {
                     if let parameter = parameter {
                         switch parameter {
+                            case .profile:
+                                return .single(.result(.peer(peer._asPeer(), .info(nil))))
                             case let .text(text):
                                 var textInputState: ChatTextInputState?
                                 if !text.isEmpty {
@@ -713,19 +745,27 @@ private func resolveInternalUrl(context: AccountContext, url: ParsedInternalUrl)
                                         }
                                     }
                                 }
-                            case let .appStart(name, payload):
-                                return .single(.progress) |> then(context.engine.messages.getBotApp(botId: peer.id, shortName: name, cached: false)
-                                |> map(Optional.init)
-                                |> `catch` { _ -> Signal<BotApp?, NoError> in
-                                    return .single(nil)
-                                }
-                                |> mapToSignal { botApp -> Signal<ResolveInternalUrlResult, NoError> in
-                                    if let botApp {
-                                        return .single(.result(.peer(peer._asPeer(), .withBotApp(ChatControllerInitialBotAppStart(botApp: botApp, payload: payload, justInstalled: false)))))
+                            case let .appStart(name, payload, compact):
+                                if name.isEmpty {
+                                    if case let .user(user) = peer, let botInfo = user.botInfo, botInfo.flags.contains(.hasWebApp) {
+                                        return .single(.result(.peer(peer._asPeer(), .withBotApp(ChatControllerInitialBotAppStart(botApp: nil, payload: payload, justInstalled: false, compact: compact)))))
                                     } else {
                                         return .single(.result(.peer(peer._asPeer(), .chat(textInputState: nil, subject: nil, peekData: nil))))
                                     }
-                                })
+                                } else {
+                                    return .single(.progress) |> then(context.engine.messages.getBotApp(botId: peer.id, shortName: name, cached: false)
+                                    |> map(Optional.init)
+                                    |> `catch` { _ -> Signal<BotApp?, NoError> in
+                                        return .single(nil)
+                                    }
+                                    |> mapToSignal { botApp -> Signal<ResolveInternalUrlResult, NoError> in
+                                        if let botApp {
+                                            return .single(.result(.peer(peer._asPeer(), .withBotApp(ChatControllerInitialBotAppStart(botApp: botApp, payload: payload, justInstalled: false, compact: compact)))))
+                                        } else {
+                                            return .single(.result(.peer(peer._asPeer(), .chat(textInputState: nil, subject: nil, peekData: nil))))
+                                        }
+                                    })
+                                }
                             case let .channelMessage(id, timecode):
                                 if case let .channel(channel) = peer, channel.flags.contains(.isForum) {
                                     let messageId = MessageId(peerId: channel.id, namespace: Namespaces.Message.Cloud, id: id)
@@ -921,7 +961,7 @@ private func resolveInternalUrl(context: AccountContext, url: ParsedInternalUrl)
                                 return .result(.replyThreadMessage(replyThreadMessage: result, messageId: messageId))
                             })
                         } else {
-                            return .single(.result(.peer(foundPeer._asPeer(), .chat(textInputState: nil, subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: timecode), peekData: nil))))
+                            return .single(.result(.peer(foundPeer._asPeer(), .chat(textInputState: nil, subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: timecode, setupReply: false), peekData: nil))))
                         }
                     } else {
                         return .single(.result(.inaccessiblePeer))
@@ -1138,6 +1178,21 @@ public func parseAdUrl(sharedContext: SharedAccountContext, url: String) -> Pars
     return nil
 }
 
+public func parseFullInternalUrl(sharedContext: SharedAccountContext, url: String) -> ParsedInternalUrl? {
+    let schemes = ["http://", "https://", ""]
+    for basePath in baseTelegramMePaths {
+        for scheme in schemes {
+            let basePrefix = scheme + basePath + "/"
+            if url.lowercased().hasPrefix(basePrefix) {
+                if let internalUrl = parseInternalUrl(sharedContext: sharedContext, query: String(url[basePrefix.endIndex...])) {
+                    return internalUrl
+                }
+            }
+        }
+    }
+    return nil
+}
+
 private struct UrlHandlingConfiguration {
     static var defaultValue: UrlHandlingConfiguration {
         return UrlHandlingConfiguration(domains: [], urlAuthDomains: [])
@@ -1182,7 +1237,11 @@ public func resolveUrlImpl(context: AccountContext, peerId: PeerId?, url: String
             var url = url
             if !url.contains("://") && !url.hasPrefix("tel:") && !url.hasPrefix("mailto:") && !url.hasPrefix("calshow:") {
                 if !(url.hasPrefix("http") || url.hasPrefix("https")) {
-                    url = "http://\(url)"
+                    if let mappedURL = URL(string: "https://\(url)"), let host = mappedURL.host, host.lowercased().hasSuffix(".ton") {
+                        url = "tonsite://\(url)"
+                    } else {
+                        url = "http://\(url)"
+                    }
                 }
             }
             
@@ -1204,7 +1263,11 @@ public func resolveUrlImpl(context: AccountContext, peerId: PeerId?, url: String
                     var url = url
                     let lowercasedUrl = url.lowercased()
                     if (lowercasedUrl.hasPrefix(scheme) && (lowercasedUrl.hasSuffix(".\(basePath)") || lowercasedUrl.contains(".\(basePath)/") || lowercasedUrl.contains(".\(basePath)?"))) {
-                        url = basePrefix + String(url[scheme.endIndex...]).replacingOccurrences(of: ".\(basePath)/", with: "").replacingOccurrences(of: ".\(basePath)", with: "")
+                        let restUrl = String(url[scheme.endIndex...])
+                        if let slashRange = restUrl.range(of: "/"), let baseRange = restUrl.range(of: basePath), slashRange.lowerBound < baseRange.lowerBound {
+                        } else {
+                            url = basePrefix + restUrl.replacingOccurrences(of: ".\(basePath)/", with: "/").replacingOccurrences(of: ".\(basePath)", with: "")
+                        }
                     }
                     if url.lowercased().hasPrefix(basePrefix) {
                         if let internalUrl = parseInternalUrl(sharedContext: context.sharedContext, query: String(url[basePrefix.endIndex...])) {
@@ -1268,5 +1331,20 @@ public func resolveInstantViewUrl(account: Account, url: String) -> Signal<Resol
                 return .single(.result(.externalUrl(url)))
             }
         }
+    }
+}
+
+public func cleanDomain(url: String) -> (domain: String, fullUrl: String) {
+    if let parsedUrl = URL(string: url) {
+        let host: String?
+        let scheme = parsedUrl.scheme ?? "https"
+        if #available(iOS 16.0, *) {
+            host = parsedUrl.host(percentEncoded: true)?.lowercased()
+        } else {
+            host = parsedUrl.host?.lowercased()
+        }
+        return (host ?? url, "\(scheme)://\(host ?? "")")
+    } else {
+        return (url, url)
     }
 }

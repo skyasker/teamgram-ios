@@ -6,11 +6,11 @@ import AVKit
 import MultilineTextComponent
 import Display
 import ShimmerEffect
-
 import TelegramCore
 import SwiftSignalKit
 import AvatarNode
 import Postbox
+import TelegramVoip
 
 final class MediaStreamVideoComponent: Component {
     let call: PresentationGroupCallImpl
@@ -157,6 +157,8 @@ final class MediaStreamVideoComponent: Component {
         private var lastPresentation: UIView?
         private var pipTrackDisplayLink: CADisplayLink?
         
+        private var livePlayerView: ProxyVideoView?
+        
         override init(frame: CGRect) {
             self.blurTintView = UIView()
             self.blurTintView.backgroundColor = UIColor(white: 0.0, alpha: 0.55)
@@ -193,7 +195,7 @@ final class MediaStreamVideoComponent: Component {
             }
         }
         
-        private func updateVideoStalled(isStalled: Bool, transition: Transition?) {
+        private func updateVideoStalled(isStalled: Bool, transition: ComponentTransition?) {
             if isStalled {
                 guard let component = self.component else { return }
                 
@@ -211,7 +213,7 @@ final class MediaStreamVideoComponent: Component {
                 let needsFadeInAnimation = hadVideo
                 
                 if loadingBlurView.superview == nil {
-                    addSubview(loadingBlurView)
+                    //addSubview(loadingBlurView)
                     if needsFadeInAnimation {
                         let anim = CABasicAnimation(keyPath: "opacity")
                         anim.duration = 0.5
@@ -282,7 +284,7 @@ final class MediaStreamVideoComponent: Component {
             }
         }
         
-        func update(component: MediaStreamVideoComponent, availableSize: CGSize, state: State, transition: Transition) -> CGSize {
+        func update(component: MediaStreamVideoComponent, availableSize: CGSize, state: State, transition: ComponentTransition) -> CGSize {
             self.state = state
             self.component = component
             self.onVideoPlaybackChange = component.onVideoPlaybackLiveChange
@@ -332,23 +334,7 @@ final class MediaStreamVideoComponent: Component {
                     })
                     stallTimer = _stallTimer
                     self.clipsToBounds = component.isFullscreen // or just true
-                    if let videoBlurView = self.videoRenderingContext.makeView(input: input, blur: true) {
-                        self.videoBlurView = videoBlurView
-                        self.insertSubview(videoBlurView, belowSubview: self.blurTintView)
-                        videoBlurView.alpha = 0
-                        UIView.animate(withDuration: 0.3) {
-                            videoBlurView.alpha = 1
-                        }
-                        self.videoBlurGradientMask.type = .radial
-                        self.videoBlurGradientMask.colors = [UIColor(rgb: 0x000000, alpha: 0.5).cgColor, UIColor(rgb: 0xffffff, alpha: 0.0).cgColor]
-                        self.videoBlurGradientMask.startPoint = CGPoint(x: 0.5, y: 0.5)
-                        self.videoBlurGradientMask.endPoint = CGPoint(x: 1.0, y: 1.0)
-                        
-                        self.videoBlurSolidMask.backgroundColor = UIColor.black.cgColor
-                        self.videoBlurGradientMask.addSublayer(videoBlurSolidMask)
-                        
-                    }
-
+                    
                     if let videoView = self.videoRenderingContext.makeView(input: input, blur: false, forceSampleBufferDisplayLayer: true) {
                         self.videoView = videoView
                         self.addSubview(videoView)
@@ -432,6 +418,23 @@ final class MediaStreamVideoComponent: Component {
                             state?.updated(transition: .immediate)
                         }
                     }
+                    
+                    if let videoView = self.videoView, let videoBlurView = self.videoRenderingContext.makeBlurView(input: input, mainView: videoView) {
+                        self.videoBlurView = videoBlurView
+                        self.insertSubview(videoBlurView, belowSubview: self.blurTintView)
+                        videoBlurView.alpha = 0
+                        UIView.animate(withDuration: 0.3) {
+                            videoBlurView.alpha = 1
+                        }
+                        self.videoBlurGradientMask.type = .radial
+                        self.videoBlurGradientMask.colors = [UIColor(rgb: 0x000000, alpha: 0.5).cgColor, UIColor(rgb: 0xffffff, alpha: 0.0).cgColor]
+                        self.videoBlurGradientMask.startPoint = CGPoint(x: 0.5, y: 0.5)
+                        self.videoBlurGradientMask.endPoint = CGPoint(x: 1.0, y: 1.0)
+                        
+                        self.videoBlurSolidMask.backgroundColor = UIColor.black.cgColor
+                        self.videoBlurGradientMask.addSublayer(videoBlurSolidMask)
+                        
+                    }
                 }
             } else if component.isFullscreen {
                 if fullScreenBackgroundPlaceholder.superview == nil {
@@ -458,7 +461,7 @@ final class MediaStreamVideoComponent: Component {
             let videoSize: CGSize
             let videoCornerRadius: CGFloat = component.isFullscreen ? 0 : 10
             
-            let videoFrameUpdateTransition: Transition
+            let videoFrameUpdateTransition: ComponentTransition
             if self.wasFullscreen != component.isFullscreen {
                 videoFrameUpdateTransition = transition
             } else {
@@ -541,6 +544,39 @@ final class MediaStreamVideoComponent: Component {
                     videoFrameUpdateTransition.setFrame(layer: self.videoBlurGradientMask, frame: videoBlurView.bounds)
                     videoFrameUpdateTransition.setFrame(layer: self.videoBlurSolidMask, frame: self.videoBlurGradientMask.bounds)
                 }
+                
+                if self.livePlayerView == nil {
+                    let livePlayerView = ProxyVideoView(context: component.call.accountContext, call: component.call)
+                    self.livePlayerView = livePlayerView
+                    livePlayerView.layer.masksToBounds = true
+                    self.addSubview(livePlayerView)
+                    livePlayerView.frame = newVideoFrame
+                    livePlayerView.layer.cornerRadius = videoCornerRadius
+                    livePlayerView.update(size: newVideoFrame.size)
+                    
+                    var pictureInPictureController: AVPictureInPictureController? = nil
+                    if #available(iOS 15.0, *) {
+                        pictureInPictureController = AVPictureInPictureController(contentSource: AVPictureInPictureController.ContentSource(playerLayer: livePlayerView.playerLayer))
+                        pictureInPictureController?.playerLayer.masksToBounds = false
+                        pictureInPictureController?.playerLayer.cornerRadius = 10
+                    } else if AVPictureInPictureController.isPictureInPictureSupported() {
+                        pictureInPictureController = AVPictureInPictureController.init(playerLayer: AVPlayerLayer(player: AVPlayer()))
+                    }
+                    
+                    pictureInPictureController?.delegate = self
+                    if #available(iOS 14.2, *) {
+                        pictureInPictureController?.canStartPictureInPictureAutomaticallyFromInline = true
+                    }
+                    if #available(iOS 14.0, *) {
+                        pictureInPictureController?.requiresLinearPlayback = true
+                    }
+                    self.pictureInPictureController = pictureInPictureController
+                }
+                if let livePlayerView = self.livePlayerView {
+                    videoFrameUpdateTransition.setFrame(view: livePlayerView, frame: newVideoFrame, completion: nil)
+                    videoFrameUpdateTransition.setCornerRadius(layer: livePlayerView.layer, cornerRadius: videoCornerRadius)
+                    livePlayerView.update(size: newVideoFrame.size)
+                }
             } else {
                 videoSize = CGSize(width: 16 / 9 * 100.0, height: 100.0).aspectFitted(.init(width: availableSize.width - videoInset * 2, height: availableSize.height))
             }
@@ -550,7 +586,7 @@ final class MediaStreamVideoComponent: Component {
             if loadingBlurView.frame == .zero {
                 loadingBlurView.frame = loadingBlurViewFrame
             } else {
-                // Using Transition.setFrame on UIVisualEffectView causes instant update of sublayers
+                // Using ComponentTransition.setFrame on UIVisualEffectView causes instant update of sublayers
                 switch videoFrameUpdateTransition.animation {
                 case let .curve(duration, curve):
                     UIView.animate(withDuration: duration, delay: 0, options: curve.containedViewLayoutTransitionCurve.viewAnimationOptions, animations: { [self] in
@@ -600,7 +636,7 @@ final class MediaStreamVideoComponent: Component {
                     }
                 }
                 
-                if self.noSignalTimeout {
+                if self.noSignalTimeout, !"".isEmpty {
                     var noSignalTransition = transition
                     let noSignalView: ComponentHostView<Empty>
                     if let current = self.noSignalView {
@@ -740,7 +776,7 @@ final class MediaStreamVideoComponent: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: State, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: State, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, transition: transition)
     }
 }
@@ -768,3 +804,94 @@ private final class CustomIntensityVisualEffectView: UIVisualEffectView {
         animator.stopAnimation(true)
     }
 }
+
+private final class ProxyVideoView: UIView {
+    private let call: PresentationGroupCallImpl
+    private let id: Int64
+    private let player: AVPlayer
+    private let playerItem: AVPlayerItem
+    let playerLayer: AVPlayerLayer
+    
+    private var contextDisposable: Disposable?
+    
+    private var failureObserverId: AnyObject?
+    private var errorObserverId: AnyObject?
+    private var rateObserver: NSKeyValueObservation?
+    
+    private var isActiveDisposable: Disposable?
+    
+    init(context: AccountContext, call: PresentationGroupCallImpl) {
+        self.call = call
+        
+        self.id = Int64.random(in: Int64.min ... Int64.max)
+        
+        let assetUrl = "http://127.0.0.1:\(SharedHLSServer.shared.port)/\(call.internalId)/master.m3u8"
+        Logger.shared.log("MediaStreamVideoComponent", "Initializing HLS asset at \(assetUrl)")
+        #if DEBUG
+        print("Initializing HLS asset at \(assetUrl)")
+        #endif
+        let asset = AVURLAsset(url: URL(string: assetUrl)!, options: [:])
+        self.playerItem = AVPlayerItem(asset: asset)
+        self.player = AVPlayer(playerItem: self.playerItem)
+        self.player.allowsExternalPlayback = true
+        self.playerLayer = AVPlayerLayer(player: self.player)
+        
+        super.init(frame: CGRect())
+        
+        self.failureObserverId = NotificationCenter.default.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: playerItem, queue: .main, using: { notification in
+            print("Player Error: \(notification.description)")
+        })
+        self.errorObserverId = NotificationCenter.default.addObserver(forName: AVPlayerItem.newErrorLogEntryNotification, object: playerItem, queue: .main, using: { notification in
+            print("Player Error: \(notification.description)")
+        })
+        self.rateObserver = self.player.observe(\.rate, changeHandler: { [weak self] _, change in
+            guard let self else {
+                return
+            }
+            print("Player rate: \(self.player.rate)")
+        })
+        
+        self.layer.addSublayer(self.playerLayer)
+        
+        self.isActiveDisposable = (context.sharedContext.applicationBindings.applicationIsActive
+        |> distinctUntilChanged
+        |> deliverOnMainQueue).start(next: { [weak self] isActive in
+            guard let self else {
+                return
+            }
+            if isActive {
+                self.playerLayer.player = self.player
+                if self.player.rate == 0.0 {
+                    self.player.play()
+                }
+            } else {
+                self.playerLayer.player = nil
+            }
+        })
+        
+        self.player.play()
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    deinit {
+        self.contextDisposable?.dispose()
+        if let failureObserverId = self.failureObserverId {
+            NotificationCenter.default.removeObserver(failureObserverId)
+        }
+        if let errorObserverId = self.errorObserverId {
+            NotificationCenter.default.removeObserver(errorObserverId)
+        }
+        if let rateObserver = self.rateObserver {
+            rateObserver.invalidate()
+        }
+        self.isActiveDisposable?.dispose()
+    }
+    
+    func update(size: CGSize) {
+        self.playerLayer.frame = CGRect(origin: CGPoint(), size: size)
+    }
+}
+

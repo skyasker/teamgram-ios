@@ -348,6 +348,9 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         itemNode.listNode.openPremiumManagement = { [weak self] in
             self?.openPremiumManagement?()
         }
+        itemNode.listNode.openStarsTopup = { [weak self] amount in
+            self?.openStarsTopup?(amount)
+        }
         
         self.currentItemStateValue.set(itemNode.listNode.state |> map { state in
             let filterId: Int32?
@@ -413,12 +416,28 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     var openBirthdaySetup: (() -> Void)?
     var openPremiumManagement: (() -> Void)?
     var openStories: ((ChatListNode.OpenStoriesSubject, ASDisplayNode?) -> Void)?
+    var openStarsTopup: ((Int64?) -> Void)?
     var addedVisibleChatsWithPeerIds: (([EnginePeer.Id]) -> Void)?
     var didBeginSelectingChats: (() -> Void)?
     var canExpandHiddenItems: (() -> Bool)?
     public var displayFilterLimit: (() -> Void)?
     
-    public init(context: AccountContext, controller: ChatListControllerImpl?, location: ChatListControllerLocation, chatListMode: ChatListNodeMode = .chatList(appendContacts: true), previewing: Bool, controlsHistoryPreload: Bool, isInlineMode: Bool, presentationData: PresentationData, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, filterBecameEmpty: @escaping (ChatListFilter?) -> Void, filterEmptyAction: @escaping (ChatListFilter?) -> Void, secondaryEmptyAction: @escaping () -> Void, openArchiveSettings: @escaping () -> Void) {
+    public init(
+        context: AccountContext,
+        controller: ChatListControllerImpl?,
+        location: ChatListControllerLocation,
+        chatListMode: ChatListNodeMode = .chatList(appendContacts: true),
+        previewing: Bool,
+        controlsHistoryPreload: Bool,
+        isInlineMode: Bool,
+        presentationData: PresentationData,
+        animationCache: AnimationCache,
+        animationRenderer: MultiAnimationRenderer,
+        filterBecameEmpty: @escaping (ChatListFilter?) -> Void,
+        filterEmptyAction: @escaping (ChatListFilter?) -> Void,
+        secondaryEmptyAction: @escaping () -> Void,
+        openArchiveSettings: @escaping () -> Void)
+    {
         self.context = context
         self.controller = controller
         self.location = location
@@ -1150,7 +1169,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 return
             }
             
-            let chatController = strongSelf.context.sharedContext.makeChatController(context: strongSelf.context, chatLocation: .peer(id: peerId), subject: nil, botStart: nil, mode: .standard(.default))
+            let chatController = strongSelf.context.sharedContext.makeChatController(context: strongSelf.context, chatLocation: .peer(id: peerId), subject: nil, botStart: nil, mode: .standard(.default), params: nil)
             (controller.navigationController as? NavigationController)?.replaceController(controller, with: chatController, animated: false)
         }
         
@@ -1302,7 +1321,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         }
     }
     
-    private func updateNavigationBar(layout: ContainerViewLayout, deferScrollApplication: Bool, transition: Transition) -> (navigationHeight: CGFloat, storiesInset: CGFloat) {
+    private func updateNavigationBar(layout: ContainerViewLayout, deferScrollApplication: Bool, transition: ComponentTransition) -> (navigationHeight: CGFloat, storiesInset: CGFloat) {
         let headerContent = self.controller?.updateHeaderContent()
         
         var tabsNode: ASDisplayNode?
@@ -1445,7 +1464,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         }
         
         if let navigationBarComponentView = self.navigationBarView.view as? ChatListNavigationBar.View {
-            navigationBarComponentView.applyScroll(offset: offset, allowAvatarsExpansion: allowAvatarsExpansion, forceUpdate: false, transition: Transition(transition).withUserData(ChatListNavigationBar.AnimationHint(
+            navigationBarComponentView.applyScroll(offset: offset, allowAvatarsExpansion: allowAvatarsExpansion, forceUpdate: false, transition: ComponentTransition(transition).withUserData(ChatListNavigationBar.AnimationHint(
                 disableStoriesAnimations: self.tempDisableStoriesAnimations,
                 crossfadeStoryPeers: false
             )))
@@ -1460,7 +1479,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         transition.updateSublayerTransformOffset(layer: self.mainContainerNode.layer, offset: CGPoint(x: 0.0, y: -mainDelta))
     }
     
-    func requestNavigationBarLayout(transition: Transition) {
+    func requestNavigationBarLayout(transition: ComponentTransition) {
         guard let (layout, _, _, _, _) = self.containerLayout else {
             return
         }
@@ -1491,7 +1510,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         var cleanNavigationBarHeight = cleanNavigationBarHeight
         var storiesInset = storiesInset
         
-        let navigationBarLayout = self.updateNavigationBar(layout: layout, deferScrollApplication: true, transition: Transition(transition))
+        let navigationBarLayout = self.updateNavigationBar(layout: layout, deferScrollApplication: true, transition: ComponentTransition(transition))
         self.mainContainerNode.initialScrollingOffset = ChatListNavigationBar.searchScrollHeight + navigationBarLayout.storiesInset
         
         navigationBarHeight = navigationBarLayout.navigationHeight
@@ -1613,7 +1632,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         
         if let navigationBarComponentView = self.navigationBarView.view as? ChatListNavigationBar.View {
             navigationBarComponentView.deferScrollApplication = false
-            navigationBarComponentView.applyCurrentScroll(transition: Transition(transition))
+            navigationBarComponentView.applyCurrentScroll(transition: ComponentTransition(transition))
         }
     }
     
@@ -1714,7 +1733,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
     
     func willScrollToTop() {
         if let navigationBarComponentView = self.navigationBarView.view as? ChatListNavigationBar.View {
-            navigationBarComponentView.applyScroll(offset: 0.0, allowAvatarsExpansion: false, transition: Transition(animation: .curve(duration: 0.3, curve: .slide)))
+            navigationBarComponentView.applyScroll(offset: 0.0, allowAvatarsExpansion: false, transition: ComponentTransition(animation: .curve(duration: 0.3, curve: .slide)))
         }
     }
     

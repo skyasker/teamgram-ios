@@ -67,6 +67,7 @@ public struct ContactsPeerItemEditing: Equatable {
 public enum ContactsPeerItemPeerMode: Equatable {
     case generalSearch(isSavedMessages: Bool)
     case peer
+    case memberList
 }
 
 public enum ContactsPeerItemBadgeType {
@@ -174,7 +175,7 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
     let options: [ItemListPeerItemRevealOption]
     let additionalActions: [ContactsPeerItemAction]
     let actionIcon: ContactsPeerItemActionIcon
-    let action: (ContactsPeerItemPeer) -> Void
+    let action: ((ContactsPeerItemPeer) -> Void)?
     let disabledAction: ((ContactsPeerItemPeer) -> Void)?
     let setPeerIdWithRevealedOptions: ((EnginePeer.Id?, EnginePeer.Id?) -> Void)?
     let deletePeer: ((EnginePeer.Id) -> Void)?
@@ -214,7 +215,7 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
         actionIcon: ContactsPeerItemActionIcon = .none,
         index: SortIndex?,
         header: ListViewItemHeader?,
-        action: @escaping (ContactsPeerItemPeer) -> Void,
+        action: ((ContactsPeerItemPeer) -> Void)?,
         disabledAction: ((ContactsPeerItemPeer) -> Void)? = nil,
         setPeerIdWithRevealedOptions: ((EnginePeer.Id?, EnginePeer.Id?) -> Void)? = nil,
         deletePeer: ((EnginePeer.Id) -> Void)? = nil,
@@ -250,7 +251,7 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
         self.deletePeer = deletePeer
         self.header = header
         self.itemHighlighting = itemHighlighting
-        self.selectable = enabled || disabledAction != nil
+        self.selectable = (enabled && action != nil) || disabledAction != nil
         self.contextAction = contextAction
         self.arrowAction = arrowAction
         self.animationCache = animationCache
@@ -349,7 +350,7 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
     
     public func selected(listView: ListView) {
         if self.enabled {
-            self.action(self.peer)
+            self.action?(self.peer)
         } else {
             listView.clearHighlightAnimated(true)
             self.disabledAction?(self.peer)
@@ -748,7 +749,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
             var verifiedIcon: EmojiStatusComponent.Content?
             switch item.peer {
             case let .peer(peer, _):
-                if let peer = peer, peer.id != item.context.account.peerId {
+                if let peer = peer, (peer.id != item.context.account.peerId || item.peerMode == .memberList) {
                     if peer.isScam {
                         credibilityIcon = .text(color: item.presentationData.theme.chat.message.incoming.scamColor, string: item.presentationData.strings.Message_ScamAccount.uppercased())
                     } else if peer.isFake {
@@ -867,7 +868,11 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                         break
                     case let .presence(presence, dateTimeFormat):
                         if case let .peer(peer, _) = item.peer, let peer, case let .user(user) = peer, user.botInfo != nil {
-                            statusAttributedString = NSAttributedString(string: item.presentationData.strings.Bot_GenericBotStatus, font: statusFont, textColor: item.presentationData.theme.list.itemSecondaryTextColor)
+                            if let subscriberCount = user.subscriberCount {
+                                statusAttributedString = NSAttributedString(string: item.presentationData.strings.Conversation_StatusBotSubscribers(subscriberCount), font: statusFont, textColor: item.presentationData.theme.list.itemSecondaryTextColor)
+                            } else {
+                                statusAttributedString = NSAttributedString(string: item.presentationData.strings.Bot_GenericBotStatus, font: statusFont, textColor: item.presentationData.theme.list.itemSecondaryTextColor)
+                            }
                         } else {
                             userPresence = presence
                             let timestamp = CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970
@@ -1088,7 +1093,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                         } else if peer.id.isReplies, case .generalSearch = item.peerMode {
                                             overrideImage = .repliesIcon
                                         } else if peer.id.isAnonymousSavedMessages, case .generalSearch = item.peerMode {
-                                            overrideImage = .anonymousSavedMessagesIcon
+                                            overrideImage = .anonymousSavedMessagesIcon(isColored: true)
                                         } else if peer.isDeleted {
                                             overrideImage = .deletedIcon
                                         }
@@ -1130,7 +1135,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                     lineWidth: 1.33,
                                     inactiveLineWidth: 1.33
                                 ),
-                                transition: animated ? Transition(animation: .curve(duration: 0.25, curve: .easeInOut)) : .immediate
+                                transition: animated ? ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)) : .immediate
                             )
                             
                             if strongSelf.avatarTapRecognizer == nil {
@@ -1409,7 +1414,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                     actionButton.action?(item.peer, sourceNode, gesture)
                                 }
                                 let moreButtonSize = moreButtonNode.measure(CGSize(width: 100.0, height: nodeLayout.contentSize.height))
-                                moreButtonNode.frame = CGRect(origin: CGPoint(x: revealOffset + params.width - params.rightInset - 18.0 - moreButtonSize.width, y:floor((nodeLayout.contentSize.height - moreButtonSize.height) / 2.0)), size: moreButtonSize)
+                                moreButtonNode.frame = CGRect(origin: CGPoint(x: revealOffset + params.width - params.rightInset - 21.0 - moreButtonSize.width, y:floor((nodeLayout.contentSize.height - moreButtonSize.height) / 2.0)), size: moreButtonSize)
                             } else if let actionButtons = actionButtons {
                                 if strongSelf.actionButtonNodes == nil {
                                     var actionButtonNodes: [HighlightableButtonNode] = []

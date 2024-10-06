@@ -20,8 +20,8 @@ public final class TextLoadingEffectView: UIView {
     private let backgroundView: UIImageView
     private let borderBackgroundView: UIImageView
     
-    private let duration: Double
-    private let gradientWidth: CGFloat
+    private var duration: Double
+    private var gradientWidth: CGFloat
     
     private var size: CGSize?
     
@@ -112,15 +112,70 @@ public final class TextLoadingEffectView: UIView {
         self.borderBackgroundView.layer.add(animation, forKey: "shimmer")
     }
     
-    public func update(color: UIColor, textNode: TextNode, range: NSRange) {
+    public func update(color: UIColor, rect: CGRect) {
+        let maskFrame = CGRect(origin: CGPoint(), size: rect.size).insetBy(dx: -4.0, dy: -4.0)
+        
+        self.gradientWidth = 260.0
+        self.duration = 1.2
+        
+        self.maskContentsView.backgroundColor = .clear
+        
+        self.backgroundView.alpha = 0.25
+        self.backgroundView.tintColor = color
+    
+        self.maskContentsView.frame = maskFrame
+    
+        let rectsSet: [CGRect] = [rect]
+                
+        self.maskHighlightNode.updateRects(rectsSet)
+        self.maskHighlightNode.frame = CGRect(origin: CGPoint(x: -maskFrame.minX, y: -maskFrame.minY), size: CGSize())
+                
+        if self.size != maskFrame.size {
+            self.size = maskFrame.size
+            
+            self.backgroundView.frame = CGRect(origin: CGPoint(x: -self.gradientWidth, y: 0.0), size: CGSize(width: self.gradientWidth, height: maskFrame.height))
+            
+            self.updateAnimations(size: maskFrame.size)
+        }
+    }
+    
+    public func update(color: UIColor, textNode: TextNodeProtocol, range: NSRange) {
         var rectsSet: [CGRect] = []
-        if let cachedLayout = textNode.cachedLayout {
-            if let rects = cachedLayout.rangeRects(in: range)?.rects, !rects.isEmpty {
-                rectsSet = rects
-            }
+        if let rects = textNode.textRangeRects(in: range)?.rects, !rects.isEmpty {
+            rectsSet = rects
         }
         
         let maskFrame = CGRect(origin: CGPoint(), size: textNode.bounds.size).insetBy(dx: -4.0, dy: -4.0)
+        
+        self.maskContentsView.backgroundColor = color.withAlphaComponent(0.1)
+        self.maskBorderContentsView.backgroundColor = color.withAlphaComponent(0.12)
+        
+        self.backgroundView.tintColor = color
+        self.borderBackgroundView.tintColor = color
+        
+        self.maskContentsView.frame = maskFrame
+        self.maskBorderContentsView.frame = maskFrame
+        
+        self.maskHighlightNode.updateRects(rectsSet)
+        self.maskHighlightNode.frame = CGRect(origin: CGPoint(x: -maskFrame.minX, y: -maskFrame.minY), size: CGSize())
+        
+        self.maskBorderHighlightNode.updateRects(rectsSet)
+        self.maskBorderHighlightNode.frame = CGRect(origin: CGPoint(x: -maskFrame.minX, y: -maskFrame.minY), size: CGSize())
+        
+        if self.size != maskFrame.size {
+            self.size = maskFrame.size
+            
+            self.backgroundView.frame = CGRect(origin: CGPoint(x: -self.gradientWidth, y: 0.0), size: CGSize(width: self.gradientWidth, height: maskFrame.height))
+            self.borderBackgroundView.frame = CGRect(origin: CGPoint(x: -self.gradientWidth, y: 0.0), size: CGSize(width: self.gradientWidth, height: maskFrame.height))
+            
+            self.updateAnimations(size: maskFrame.size)
+        }
+    }
+    
+    public func update(color: UIColor, size: CGSize, rects: [CGRect]) {
+        let rectsSet: [CGRect] = rects
+        
+        let maskFrame = CGRect(origin: CGPoint(), size: size).insetBy(dx: -4.0, dy: -4.0)
         
         self.maskContentsView.backgroundColor = color.withAlphaComponent(0.1)
         self.maskBorderContentsView.backgroundColor = color.withAlphaComponent(0.12)

@@ -14,6 +14,7 @@ import AnimationCache
 import MultiAnimationRenderer
 import ShimmerEffect
 import GenerateStickerPlaceholderImage
+import EntityKeyboard
 
 private func generateBubbleImage(foreground: UIColor, diameter: CGFloat, shadowBlur: CGFloat) -> UIImage? {
     return generateImage(CGSize(width: diameter + shadowBlur * 2.0, height: diameter + shadowBlur * 2.0), rotatedContext: { size, context in
@@ -52,13 +53,89 @@ protocol ReactionItemNode: ASDisplayNode {
     func updateLayout(size: CGSize, isExpanded: Bool, largeExpanded: Bool, isPreviewing: Bool, transition: ContainedViewLayoutTransition)
 }
 
-private let lockedBackgroundImage: UIImage = generateFilledCircleImage(diameter: 12.0, color: .white)!.withRenderingMode(.alwaysTemplate)
+private let lockedBackgroundImage: UIImage = generateFilledCircleImage(diameter: 16.0, color: .white)!.withRenderingMode(.alwaysTemplate)
 private let lockedBadgeIcon: UIImage? = generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Media/PanelBadgeLock"), color: .white)
+
+private final class StarsButtonEffectLayer: SimpleLayer {
+    let gradientLayer = SimpleGradientLayer()
+    let emitterLayer = CAEmitterLayer()
+    
+    override init() {
+        super.init()
+        
+        self.addSublayer(self.gradientLayer)
+        self.addSublayer(self.emitterLayer)
+    }
+    
+    override init(layer: Any) {
+        super.init(layer: layer)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    private func setup(theme: PresentationTheme) {
+        let color = UIColor(rgb: 0xffbe27, alpha: theme.overallDarkAppearance ? 0.2 : 1.0)
+        
+        let emitter = CAEmitterCell()
+        emitter.name = "emitter"
+        emitter.contents = UIImage(bundleImageName: "Premium/Stars/Particle")?.cgImage
+        emitter.birthRate = 25.0
+        emitter.lifetime = 2.0
+        emitter.velocity = 12.0
+        emitter.velocityRange = 3
+        emitter.scale = 0.1
+        emitter.scaleRange = 0.08
+        emitter.alphaRange = 0.1
+        emitter.emissionRange = .pi * 2.0
+        emitter.setValue(3.0, forKey: "mass")
+        emitter.setValue(2.0, forKey: "massRange")
+        
+        let staticColors: [Any] = [
+            color.withAlphaComponent(0.0).cgColor,
+            color.cgColor,
+            color.cgColor,
+            color.withAlphaComponent(0.0).cgColor
+        ]
+        let staticColorBehavior = CAEmitterCell.createEmitterBehavior(type: "colorOverLife")
+        staticColorBehavior.setValue(staticColors, forKey: "colors")
+        emitter.setValue([staticColorBehavior], forKey: "emitterBehaviors")
+        
+        self.emitterLayer.emitterCells = [emitter]
+        
+        let gradientColor = UIColor(rgb: 0xffbe27, alpha: theme.overallDarkAppearance ? 0.2 : 1.0)
+        
+        self.gradientLayer.type = .radial
+        self.gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.5)
+        self.gradientLayer.endPoint = CGPoint(x: 0.0, y: 1.0)
+        self.gradientLayer.colors = [
+            gradientColor.withMultipliedAlpha(0.4).cgColor,
+            gradientColor.withMultipliedAlpha(0.4).cgColor,
+            gradientColor.withMultipliedAlpha(0.25).cgColor,
+            gradientColor.withMultipliedAlpha(0.0).cgColor
+        ] as [CGColor]
+    }
+    
+    func update(theme: PresentationTheme, size: CGSize, transition: ContainedViewLayoutTransition) {
+        if self.emitterLayer.emitterCells == nil {
+            self.setup(theme: theme)
+        }
+        self.emitterLayer.emitterShape = .circle
+        self.emitterLayer.emitterSize = CGSize(width: size.width * 0.7, height: size.height * 0.7)
+        self.emitterLayer.emitterMode = .surface
+        self.emitterLayer.frame = CGRect(origin: .zero, size: size)
+        self.emitterLayer.emitterPosition = CGPoint(x: size.width / 2.0, y: size.height / 2.0)
+        
+        transition.updateFrame(layer: self.gradientLayer, frame: CGRect(origin: CGPoint(), size: size).insetBy(dx: -6.0, dy: -6.0).offsetBy(dx: 0.0, dy: 2.0))
+    }
+}
 
 public final class ReactionNode: ASDisplayNode, ReactionItemNode {
     let context: AccountContext
     let theme: PresentationTheme
     let item: ReactionItem
+    let icon: EmojiPagerContentComponent.Item.Icon
     private let loopIdle: Bool
     private let isLocked: Bool
     private let hasAppearAnimation: Bool
@@ -66,6 +143,8 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
     
     let selectionTintView: UIView?
     let selectionView: UIView?
+    
+    private var starsEffectLayer: StarsButtonEffectLayer?
     
     private var animateInAnimationNode: AnimatedStickerNode?
     private var staticAnimationPlaceholderView: UIImageView?
@@ -102,10 +181,11 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
         return self.staticAnimationNode.currentFrameImage != nil
     }
     
-    public init(context: AccountContext, theme: PresentationTheme, item: ReactionItem, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, loopIdle: Bool, isLocked: Bool, hasAppearAnimation: Bool = true, useDirectRendering: Bool = false) {
+    public init(context: AccountContext, theme: PresentationTheme, item: ReactionItem, icon: EmojiPagerContentComponent.Item.Icon, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, loopIdle: Bool, isLocked: Bool, hasAppearAnimation: Bool = true, useDirectRendering: Bool = false) {
         self.context = context
         self.theme = theme
         self.item = item
+        self.icon = icon
         self.loopIdle = loopIdle
         self.isLocked = isLocked
         self.hasAppearAnimation = hasAppearAnimation
@@ -125,6 +205,18 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
         }
         
         super.init()
+        
+        if case .stars = item.reaction.rawValue {
+            let starsEffectLayer = StarsButtonEffectLayer()
+            self.starsEffectLayer = starsEffectLayer
+            self.layer.addSublayer(starsEffectLayer)
+        }
+        
+        if item.stillAnimation.isCustomTemplateEmoji {
+            if let animationNode = self.staticAnimationNode as? DefaultAnimatedStickerNodeImpl {
+                animationNode.dynamicColor = theme.chat.inputPanel.panelControlAccentColor
+            }
+        }
         
         if let animateInAnimationNode = self.animateInAnimationNode {
             self.addSubnode(animateInAnimationNode)
@@ -220,8 +312,19 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
         self.customContentsNode?.contents = contents
     }
     
+    public func animateHideEffects() {
+        if let starsEffectLayer = self.starsEffectLayer {
+            starsEffectLayer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false)
+        }
+    }
+    
     public func updateLayout(size: CGSize, isExpanded: Bool, largeExpanded: Bool, isPreviewing: Bool, transition: ContainedViewLayoutTransition) {
         let intrinsicSize = size
+        
+        if let starsEffectLayer = self.starsEffectLayer {
+            transition.updateFrame(layer: starsEffectLayer, frame: CGRect(origin: CGPoint(), size: size))
+            starsEffectLayer.update(theme: self.theme, size: size, transition: transition)
+        }
         
         let animationSize = self.item.stillAnimation.dimensions?.cgSize ?? CGSize(width: 512.0, height: 512.0)
         var animationDisplaySize = animationSize.aspectFitted(intrinsicSize)
@@ -469,11 +572,11 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
         }
         
         if let lockBackgroundView = self.lockBackgroundView, let lockIconView = self.lockIconView, let iconImage = lockIconView.image {
-            let lockSize: CGFloat = 12.0
+            let lockSize: CGFloat = 16.0
             let iconBackgroundFrame = CGRect(origin: CGPoint(x: animationFrame.maxX - lockSize, y: animationFrame.maxY - lockSize), size: CGSize(width: lockSize, height: lockSize))
             transition.updateFrame(view: lockBackgroundView, frame: iconBackgroundFrame)
             
-            let iconFactor: CGFloat = 0.7
+            let iconFactor: CGFloat = 1.0
             let iconImageSize = CGSize(width: floor(iconImage.size.width * iconFactor), height: floor(iconImage.size.height * iconFactor))
             
             transition.updateFrame(view: lockIconView, frame: CGRect(origin: CGPoint(x: iconBackgroundFrame.minX + floorToScreenPixels((iconBackgroundFrame.width - iconImageSize.width) * 0.5), y: iconBackgroundFrame.minY + floorToScreenPixels((iconBackgroundFrame.height - iconImageSize.height) * 0.5)), size: iconImageSize))

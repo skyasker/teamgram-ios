@@ -170,6 +170,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
         hasStickers: Bool = true,
         hasGifs: Bool = true,
         hideBackground: Bool = false,
+        forceHasPremium: Bool = false,
         sendGif: ((FileMediaReference, UIView, CGRect, Bool, Bool) -> Bool)?
     ) -> Signal<InputData, NoError> {
         let animationCache = context.animationCache
@@ -187,6 +188,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
             areCustomEmojiEnabled: areCustomEmojiEnabled,
             chatPeerId: chatPeerId,
             hasSearch: hasSearch,
+            forceHasPremium: forceHasPremium,
             hideBackground: hideBackground
         )
         
@@ -208,6 +210,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
                 hasTrending: hasTrending,
                 forceHasPremium: false,
                 hasEdit: hasEdit,
+                hasAdd: hasEdit,
                 subject: .chatStickers,
                 hideBackground: hideBackground
             )
@@ -418,7 +421,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
     private var currentState: (width: CGFloat, leftInset: CGFloat, rightInset: CGFloat, bottomInset: CGFloat, standardInputHeight: CGFloat, inputHeight: CGFloat, maximumHeight: CGFloat, inputPanelHeight: CGFloat, interfaceState: ChatPresentationInterfaceState, layoutMetrics: LayoutMetrics, deviceMetrics: DeviceMetrics, isVisible: Bool, isExpanded: Bool)?
     
     private var scheduledContentAnimationHint: EmojiPagerContentComponent.ContentAnimation?
-    private var scheduledInnerTransition: Transition?
+    private var scheduledInnerTransition: ComponentTransition?
     
     private var gifMode: GifPagerContentComponent.Subject? {
         didSet {
@@ -465,7 +468,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
         |> distinctUntilChanged
     }
     
-    public init(context: AccountContext, currentInputData: InputData, updatedInputData: Signal<InputData, NoError>, defaultToEmojiTab: Bool, opaqueTopPanelBackground: Bool = false, useOpaqueTheme: Bool = false, interaction: ChatEntityKeyboardInputNode.Interaction?, chatPeerId: PeerId?, stateContext: StateContext?) {
+    public init(context: AccountContext, currentInputData: InputData, updatedInputData: Signal<InputData, NoError>, defaultToEmojiTab: Bool, opaqueTopPanelBackground: Bool = false, useOpaqueTheme: Bool = false, interaction: ChatEntityKeyboardInputNode.Interaction?, chatPeerId: PeerId?, stateContext: StateContext?, forceHasPremium: Bool = false) {
         self.context = context
         self.currentInputData = currentInputData
         self.defaultToEmojiTab = defaultToEmojiTab
@@ -686,7 +689,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
                             }
                         }
                         
-                        if file.isPremiumEmoji && !hasPremium && groupId != AnyHashable("peerSpecific") {
+                        if file.isPremiumEmoji && !hasPremium && groupId != AnyHashable("peerSpecific") && !forceHasPremium {
                             var animateInAsReplacement = false
                             if let currentUndoOverlayController = strongSelf.currentUndoOverlayController {
                                 currentUndoOverlayController.dismissWithCommitActionAndReplacementAnimation()
@@ -1397,7 +1400,8 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
                         parentNavigationController: interaction.getNavigationController(),
                         sendSticker: { [weak interaction] fileReference, sourceView, sourceRect in
                             return interaction?.sendSticker(fileReference, false, false, nil, false, sourceView, sourceRect, nil, []) ?? false
-                        }
+                        },
+                        actionPerformed: nil
                     )
                     interaction.presentController(controller, nil)
                 })
@@ -1584,7 +1588,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
                 }
             }
             
-            var transition: Transition = .immediate
+            var transition: ComponentTransition = .immediate
             var useAnimation = false
             
             if let pagerView = strongSelf.entityKeyboardView.componentView as? EntityKeyboardComponent.View, let centralId = pagerView.centralId {
@@ -1603,7 +1607,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
                 } else {
                     contentAnimation = EmojiPagerContentComponent.ContentAnimation(type: .generic)
                 }
-                transition = Transition(animation: .curve(duration: 0.4, curve: .spring)).withUserData(contentAnimation)
+                transition = ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)).withUserData(contentAnimation)
             }
             strongSelf.currentInputData = strongSelf.processInputData(inputData: inputData)
             strongSelf.performLayout(transition: transition)
@@ -1739,7 +1743,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
         self.isMarkInputCollapsed = true
     }
     
-    private func performLayout(transition: Transition) {
+    private func performLayout(transition: ComponentTransition) {
         guard let (width, leftInset, rightInset, bottomInset, standardInputHeight, inputHeight, maximumHeight, inputPanelHeight, interfaceState, layoutMetrics, deviceMetrics, isVisible, isExpanded) = self.currentState else {
             return
         }
@@ -1757,12 +1761,12 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
     public override func updateLayout(width: CGFloat, leftInset: CGFloat, rightInset: CGFloat, bottomInset: CGFloat, standardInputHeight: CGFloat, inputHeight: CGFloat, maximumHeight: CGFloat, inputPanelHeight: CGFloat, transition: ContainedViewLayoutTransition, interfaceState: ChatPresentationInterfaceState, layoutMetrics: LayoutMetrics, deviceMetrics: DeviceMetrics, isVisible: Bool, isExpanded: Bool) -> (CGFloat, CGFloat) {
         self.currentState = (width, leftInset, rightInset, bottomInset, standardInputHeight, inputHeight, maximumHeight, inputPanelHeight, interfaceState, layoutMetrics, deviceMetrics, isVisible, isExpanded)
         
-        let innerTransition: Transition
+        let innerTransition: ComponentTransition
         if let scheduledInnerTransition = self.scheduledInnerTransition {
             self.scheduledInnerTransition = nil
             innerTransition = scheduledInnerTransition
         } else {
-            innerTransition = Transition(transition)
+            innerTransition = ComponentTransition(transition)
         }
         
         let wasMarkedInputCollapsed = self.isMarkInputCollapsed
@@ -1825,6 +1829,8 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
         if case let .customChatContents(customChatContents) = interfaceState.subject {
             switch customChatContents.kind {
             case .quickReplyMessageInput:
+                break
+            case .hashTagSearch:
                 break
             case .businessLinkSetup:
                 stickerContent = nil
@@ -2089,7 +2095,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
             guard let strongSelf = self else {
                 return
             }
-            strongSelf.performLayout(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+            strongSelf.performLayout(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
         })
         
         if self.context.sharedContext.currentStickerSettings.with({ $0 }).dynamicPackOrder {
@@ -2125,7 +2131,7 @@ public final class ChatEntityKeyboardInputNode: ChatInputNode {
             
             let message = Message(stableId: 0, stableVersion: 0, id: MessageId(peerId: PeerId(0), namespace: Namespaces.Message.Local, id: 0), globallyUniqueId: nil, groupingKey: nil, groupInfo: nil, threadId: nil, timestamp: 0, flags: [], tags: [], globalTags: [], localTags: [], customTags: [], forwardInfo: nil, author: nil, text: "", attributes: [], media: [file.media], peers: SimpleDictionary(), associatedMessages: SimpleDictionary(), associatedMessageIds: [], associatedMedia: [:], associatedThreadInfo: nil, associatedStories: [:])
             
-            let gallery = GalleryController(context: strongSelf.context, source: .standaloneMessage(message), streamSingleVideo: true, replaceRootController: { _, _ in
+            let gallery = GalleryController(context: strongSelf.context, source: .standaloneMessage(message, nil), streamSingleVideo: true, replaceRootController: { _, _ in
             }, baseNavigationController: nil)
             gallery.setHintWillBePresentedInPreviewingContext(true)
             
@@ -2880,7 +2886,7 @@ public final class EmojiContentPeekBehaviorImpl: EmojiContentPeekBehavior {
                                                 let controller = strongSelf.context.sharedContext.makeStickerPackScreen(context: context, updatedPresentationData: nil, mainStickerPack: packReference, stickerPacks: [packReference], loadedStickerPacks: [], isEditing: false, expandIfNeeded: false, parentNavigationController: interaction.navigationController(), sendSticker: { file, sourceView, sourceRect in
                                                     sendSticker(file, false, false, nil, false, sourceView, sourceRect, nil)
                                                     return true
-                                                })
+                                                }, actionPerformed: nil)
                                                 
                                                 interaction.navigationController()?.view.window?.endEditing(true)
                                                 interaction.presentController(controller, nil)

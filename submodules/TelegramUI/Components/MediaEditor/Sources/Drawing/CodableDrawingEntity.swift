@@ -1,5 +1,6 @@
 import Foundation
 import TelegramCore
+import UrlEscaping
 
 public func decodeCodableDrawingEntities(data: Data) -> [CodableDrawingEntity] {
     if let codableEntities = try? JSONDecoder().decode([CodableDrawingEntity].self, from: data) {
@@ -23,6 +24,8 @@ public enum CodableDrawingEntity: Equatable {
     case bubble(DrawingBubbleEntity)
     case vector(DrawingVectorEntity)
     case location(DrawingLocationEntity)
+    case link(DrawingLinkEntity)
+    case weather(DrawingWeatherEntity)
     
     public init?(entity: DrawingEntity) {
         if let entity = entity as? DrawingStickerEntity {
@@ -37,6 +40,10 @@ public enum CodableDrawingEntity: Equatable {
             self = .vector(entity)
         } else if let entity = entity as? DrawingLocationEntity {
             self = .location(entity)
+        } else if let entity = entity as? DrawingLinkEntity {
+            self = .link(entity)
+        } else if let entity = entity as? DrawingWeatherEntity {
+            self = .weather(entity)
         } else {
             return nil
         }
@@ -56,6 +63,10 @@ public enum CodableDrawingEntity: Equatable {
             return entity
         case let .location(entity):
             return entity
+        case let .link(entity):
+            return entity
+        case let .weather(entity):
+            return entity
         }
     }
     
@@ -64,6 +75,7 @@ public enum CodableDrawingEntity: Equatable {
         var size: CGSize?
         var rotation: CGFloat?
         var scale: CGFloat?
+        var cornerRadius: Double?
         
         switch self {
         case let .location(entity):
@@ -71,6 +83,9 @@ public enum CodableDrawingEntity: Equatable {
             size = entity.renderImage?.size
             rotation = entity.rotation
             scale = entity.scale
+            if let size {
+                cornerRadius = 10.0 / (size.width * entity.scale)
+            }
         case let .sticker(entity):
             var entityPosition = entity.position
             var entitySize = entity.baseSize
@@ -78,7 +93,7 @@ public enum CodableDrawingEntity: Equatable {
             let entityScale = entity.scale
             
             if case .message = entity.content {
-                let offset: CGFloat = 16.18 * entityScale //54.0 * entityScale / 3.337
+                let offset: CGFloat = 16.18 * entityScale
                 entitySize = CGSize(width: entitySize.width - 38.0, height: entitySize.height - 4.0)
                 entityPosition = CGPoint(x: entityPosition.x + offset * cos(entityRotation), y: entityPosition.y + offset * sin(entityRotation))
             }
@@ -87,6 +102,27 @@ public enum CodableDrawingEntity: Equatable {
             size = entitySize
             rotation = entityRotation
             scale = entityScale
+        case let .link(entity):
+            position = entity.position
+            rotation = entity.rotation
+            scale = entity.scale
+            if let entitySize = entity.renderImage?.size {
+                if entity.whiteImage != nil {
+                    cornerRadius = 38.0 / (entitySize.width * entity.scale)
+                    size = CGSize(width: entitySize.width - 28.0, height: entitySize.height - 26.0)
+                } else {
+                    cornerRadius = 10.0 / (entitySize.width * entity.scale)
+                    size = entitySize
+                }
+            }
+        case let .weather(entity):
+            position = entity.position
+            size = entity.renderImage?.size
+            rotation = entity.rotation
+            scale = entity.scale
+            if let size {
+                cornerRadius = (size.height * 0.17) / size.width
+            }
         default:
             return nil
         }
@@ -95,12 +131,16 @@ public enum CodableDrawingEntity: Equatable {
             return nil
         }
         
+        let width = size.width * scale / 1080.0 * 100.0
+        let height = size.height * scale / 1920.0 * 100.0
+        
         return MediaArea.Coordinates(
             x: position.x / 1080.0 * 100.0,
             y: position.y / 1920.0 * 100.0,
-            width: size.width * scale / 1080.0 * 100.0,
-            height: size.height * scale / 1920.0 * 100.0,
-            rotation: rotation / .pi * 180.0
+            width: width,
+            height: height,
+            rotation: rotation / .pi * 180.0,
+            cornerRadius: cornerRadius.flatMap { $0 * 100.0 }
         )
     }
     
@@ -116,6 +156,7 @@ public enum CodableDrawingEntity: Equatable {
                     latitude: entity.location.latitude,
                     longitude: entity.location.longitude,
                     venue: entity.location.venue,
+                    address: entity.location.address,
                     queryId: entity.queryId,
                     resultId: entity.resultId
                 )
@@ -135,10 +176,36 @@ public enum CodableDrawingEntity: Equatable {
                     flags: flags
                 )
             } else if case let .message(messageIds, _, _, _, _) = entity.content, let messageId = messageIds.first {
-                return .channelMessage(coordinates: coordinates, messageId: messageId)
+                return .channelMessage(
+                    coordinates: coordinates,
+                    messageId: messageId
+                )
             } else {
                 return nil
             }
+        case let .link(entity):
+            return .link(
+                coordinates: coordinates,
+                url: explicitUrl(entity.url)
+            )
+        case let .weather(entity):
+            let color: UInt32
+            switch entity.style {
+            case .white:
+                color = 0xffffffff
+            case .black:
+                color = 0xff000000
+            case .transparent:
+                color = 0x51000000
+            case .custom:
+                color = entity.color.toUIColor().argb
+            }
+            return .weather(
+                coordinates: coordinates,
+                emoji: entity.emoji,
+                temperature: entity.temperature,
+                color: Int32(bitPattern: color)
+            )
         default:
             return nil
         }
@@ -158,6 +225,8 @@ extension CodableDrawingEntity: Codable {
         case bubble
         case vector
         case location
+        case link
+        case weather
     }
 
     public init(from decoder: Decoder) throws {
@@ -176,6 +245,10 @@ extension CodableDrawingEntity: Codable {
             self = .vector(try container.decode(DrawingVectorEntity.self, forKey: .entity))
         case .location:
             self = .location(try container.decode(DrawingLocationEntity.self, forKey: .entity))
+        case .link:
+            self = .link(try container.decode(DrawingLinkEntity.self, forKey: .entity))
+        case .weather:
+            self = .weather(try container.decode(DrawingWeatherEntity.self, forKey: .entity))
         }
     }
 
@@ -199,6 +272,12 @@ extension CodableDrawingEntity: Codable {
             try container.encode(payload, forKey: .entity)
         case let .location(payload):
             try container.encode(EntityType.location, forKey: .type)
+            try container.encode(payload, forKey: .entity)
+        case let .link(payload):
+            try container.encode(EntityType.link, forKey: .type)
+            try container.encode(payload, forKey: .entity)
+        case let .weather(payload):
+            try container.encode(EntityType.weather, forKey: .type)
             try container.encode(payload, forKey: .entity)
         }
     }

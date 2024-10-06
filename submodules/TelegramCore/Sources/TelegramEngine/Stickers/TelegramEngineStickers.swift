@@ -145,6 +145,10 @@ public extension TelegramEngine {
             return _internal_cachedAvailableReactions(postbox: self.account.postbox)
         }
         
+        public func availableMessageEffects() -> Signal<AvailableMessageEffects?, NoError> {
+            return _internal_cachedAvailableMessageEffects(postbox: self.account.postbox)
+        }
+        
         public func savedMessageTagData() -> Signal<SavedMessageTags?, NoError> {
             return self.account.postbox.combinedView(keys: [PostboxViewKey.cachedItem(_internal_savedMessageTagsCacheKey())])
             |> mapToSignal { views -> Signal<SavedMessageTags?, NoError> in
@@ -357,7 +361,7 @@ public func _internal_resolveInlineStickers(postbox: Postbox, network: Network, 
                 for result in documentSets {
                     if let result = result {
                         for document in result {
-                            if let file = telegramMediaFileFromApiDocument(document) {
+                            if let file = telegramMediaFileFromApiDocument(document, altDocuments: []) {
                                 resultFiles[file.fileId.id] = file
                                 transaction.storeMediaIfNotPresent(media: file)
                             }

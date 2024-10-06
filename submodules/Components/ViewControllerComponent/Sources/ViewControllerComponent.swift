@@ -65,7 +65,7 @@ open class ViewControllerComponentContainer: ViewController {
             inputHeight: CGFloat,
             metrics: LayoutMetrics,
             deviceMetrics: DeviceMetrics,
-            orientation: UIInterfaceOrientation? = nil,
+            orientation: UIInterfaceOrientation?,
             isVisible: Bool,
             theme: PresentationTheme,
             strings: PresentationStrings,
@@ -166,7 +166,7 @@ open class ViewControllerComponentContainer: ViewController {
             self.view.addSubview(self.hostView)
         }
         
-        func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: Transition) {
+        func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: ComponentTransition) {
             self.currentLayout = (layout, navigationHeight)
             
             let environment = ViewControllerComponentContainer.Environment(
@@ -177,6 +177,7 @@ open class ViewControllerComponentContainer: ViewController {
                 inputHeight: layout.inputHeight ?? 0.0,
                 metrics: layout.metrics,
                 deviceMetrics: layout.deviceMetrics,
+                orientation: layout.metrics.orientation,
                 isVisible: self.currentIsVisible,
                 theme: self.resolvedTheme,
                 strings: self.presentationData.strings,
@@ -206,10 +207,10 @@ open class ViewControllerComponentContainer: ViewController {
             guard let currentLayout = self.currentLayout else {
                 return
             }
-            self.containerLayoutUpdated(layout: currentLayout.layout, navigationHeight: currentLayout.navigationHeight, transition: animated ? Transition(animation: .none).withUserData(isVisible ? AnimateInTransition() : AnimateOutTransition()) : .immediate)
+            self.containerLayoutUpdated(layout: currentLayout.layout, navigationHeight: currentLayout.navigationHeight, transition: animated ? ComponentTransition(animation: .none).withUserData(isVisible ? AnimateInTransition() : AnimateOutTransition()) : .immediate)
         }
         
-        func updateComponent(component: AnyComponent<ViewControllerComponentContainer.Environment>, transition: Transition) {
+        func updateComponent(component: AnyComponent<ViewControllerComponentContainer.Environment>, transition: ComponentTransition) {
             self.component = component
             
             guard let currentLayout = self.currentLayout else {
@@ -273,17 +274,19 @@ open class ViewControllerComponentContainer: ViewController {
                     theme = theme.withModalBlocksBackground()
                     resolvedTheme = resolvedTheme.withModalBlocksBackground()
                 }
+                
+                let presentationData = presentationData.withUpdated(theme: theme)
 
-                strongSelf.node.presentationData = presentationData.withUpdated(theme: theme)
+                strongSelf.node.presentationData = presentationData
                 strongSelf.node.resolvedTheme = resolvedTheme
-        
+                
                 switch statusBarStyle {
                     case .none:
                         strongSelf.statusBar.statusBarStyle = .Hide
                     case .ignore:
                         strongSelf.statusBar.statusBarStyle = .Ignore
                     case .default:
-                        strongSelf.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+                        strongSelf.statusBar.statusBarStyle = resolvedTheme.rootController.statusBarStyle.style
                 }
                 
                 let navigationBarPresentationData: NavigationBarPresentationData?
@@ -305,13 +308,14 @@ open class ViewControllerComponentContainer: ViewController {
             }
         }).strict()
         
+        let resolvedTheme = resolveTheme(baseTheme: presentationData.theme, theme: self.theme)
         switch statusBarStyle {
             case .none:
                 self.statusBar.statusBarStyle = .Hide
             case .ignore:
                 self.statusBar.statusBarStyle = .Ignore
             case .default:
-                self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+                self.statusBar.statusBarStyle = resolvedTheme.rootController.statusBarStyle.style
         }
     }
     
@@ -369,10 +373,10 @@ open class ViewControllerComponentContainer: ViewController {
         let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
         
         self.validLayout = layout
-        self.node.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: Transition(transition))
+        self.node.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: ComponentTransition(transition))
     }
     
-    public func updateComponent(component: AnyComponent<ViewControllerComponentContainer.Environment>, transition: Transition) {
+    public func updateComponent(component: AnyComponent<ViewControllerComponentContainer.Environment>, transition: ComponentTransition) {
         self.node.updateComponent(component: component, transition: transition)
     }
 }

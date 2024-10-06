@@ -742,8 +742,8 @@ public final class OngoingCallContext {
     public final class AudioDevice {
         let impl: SharedCallAudioDevice
         
-        public static func create() -> AudioDevice? {
-            return AudioDevice(impl: SharedCallAudioDevice(disableRecording: false))
+        public static func create(enableSystemMute: Bool) -> AudioDevice? {
+            return AudioDevice(impl: SharedCallAudioDevice(disableRecording: false, enableSystemMute: enableSystemMute))
         }
         
         private init(impl: SharedCallAudioDevice) {
@@ -958,9 +958,20 @@ public final class OngoingCallContext {
                         directConnection = nil
                     }
                     
-                    #if DEBUG
-                    //var customParameters = customParameters
-                    //customParameters["v9_reflector_shortcircuit"] = true as NSNumber
+                    #if DEBUG && false
+                    var customParameters = customParameters
+                    if let initialCustomParameters = try? JSONSerialization.jsonObject(with: (customParameters ?? "{}").data(using: .utf8)!) as? [String: Any] {
+                        var customParametersValue: [String: Any]
+                        customParametersValue = initialCustomParameters
+                        customParametersValue["network_standalone_reflectors"] = true as NSNumber
+                        customParametersValue["network_use_mtproto"] = true as NSNumber
+                        customParametersValue["network_skip_initial_ping"] = true as NSNumber
+                        customParameters = String(data: try! JSONSerialization.data(withJSONObject: customParametersValue), encoding: .utf8)!
+                        
+                        if let reflector = filteredConnections.first(where: { $0.username == "reflector" && $0.reflectorId == 1 }) {
+                            filteredConnections = [reflector]
+                        }
+                    }
                     #endif
                     
                     let context = OngoingCallThreadLocalContextWebrtc(

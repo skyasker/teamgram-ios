@@ -200,6 +200,7 @@ final class StoryItemContentComponent: Component {
             if case let .file(file) = currentMessageMedia, let peerReference = PeerReference(component.peer._asPeer()) {
                 if self.videoNode == nil {
                     let videoNode = UniversalVideoNode(
+                        accountId: component.context.account.id,
                         postbox: component.context.account.postbox,
                         audioSession: component.context.sharedContext.mediaManager.audioSession,
                         manager: component.context.sharedContext.mediaManager.universalVideoManager,
@@ -547,7 +548,7 @@ final class StoryItemContentComponent: Component {
             return nil
         }
         
-        private func updateOverlays(component: StoryItemContentComponent, size: CGSize, synchronousLoad: Bool, transition: Transition) {
+        private func updateOverlays(component: StoryItemContentComponent, size: CGSize, synchronousLoad: Bool, transition: ComponentTransition) {
             self.overlaysView.update(
                 context: component.context,
                 strings: component.strings,
@@ -569,7 +570,7 @@ final class StoryItemContentComponent: Component {
                 return
             }
             if apply {
-                videoNode.seek(timestamp)
+                videoNode.seek(min(timestamp, self.effectiveDuration - 0.3))
             }
             self.isSeeking = true
             self.updateVideoPlaybackProgress(timestamp)
@@ -579,7 +580,7 @@ final class StoryItemContentComponent: Component {
             self.isSeeking = false
         }
 
-        func update(component: StoryItemContentComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<StoryContentItem.Environment>, transition: Transition) -> CGSize {
+        func update(component: StoryItemContentComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<StoryContentItem.Environment>, transition: ComponentTransition) -> CGSize {
             let previousItem = self.component?.item
             
             self.component = component
@@ -598,10 +599,10 @@ final class StoryItemContentComponent: Component {
             
             let selectedMedia: EngineMedia
             var messageMedia: EngineMedia?
-            if !component.preferHighQuality, !component.item.isMy, let alternativeMedia = component.item.alternativeMedia {
-                selectedMedia = alternativeMedia
+            if !component.preferHighQuality, !component.item.isMy, let alternativeMediaValue = component.item.alternativeMediaList.first {
+                selectedMedia = alternativeMediaValue
                 
-                switch alternativeMedia {
+                switch alternativeMediaValue {
                 case let .image(image):
                     messageMedia = .image(image)
                 case let .file(file):
@@ -917,7 +918,22 @@ final class StoryItemContentComponent: Component {
                         mediaAreasEffectView.removeFromSuperview()
                     }
                 }
-                if !component.item.mediaAreas.isEmpty {
+                
+                var shimmeringMediaAreas: [MediaArea] = component.item.mediaAreas.filter { mediaArea in
+                    if case .link = mediaArea {
+                        return true
+                    } else if case .venue = mediaArea {
+                        return true
+                    } else {
+                        return false
+                    }
+                }
+                
+                if component.peer.id.isTelegramNotifications {
+                    shimmeringMediaAreas = []
+                }
+                
+                if !shimmeringMediaAreas.isEmpty {
                     let mediaAreasEffectView: StoryItemLoadingEffectView
                     if let current = self.mediaAreasEffectView {
                         mediaAreasEffectView = current
@@ -928,44 +944,14 @@ final class StoryItemContentComponent: Component {
                     }
                     mediaAreasEffectView.update(size: availableSize, transition: transition)
                     
-                    let maskLayer: CALayer
-                    if let current = mediaAreasEffectView.layer.mask {
+                    let maskLayer: MediaAreaMaskLayer
+                    if let current = mediaAreasEffectView.layer.mask as? MediaAreaMaskLayer {
                         maskLayer = current
                     } else {
-                        maskLayer = CALayer()
+                        maskLayer = MediaAreaMaskLayer()
                         mediaAreasEffectView.layer.mask = maskLayer
                     }
-                    
-                    if (maskLayer.sublayers ?? []).isEmpty {
-                        let referenceSize = availableSize
-                        for mediaArea in component.item.mediaAreas {
-                            guard case .venue = mediaArea else {
-                                continue
-                            }
-                            let size = CGSize(width: mediaArea.coordinates.width / 100.0 * referenceSize.width, height: mediaArea.coordinates.height / 100.0 * referenceSize.height)
-                            let position = CGPoint(x: mediaArea.coordinates.x / 100.0 * referenceSize.width, y: mediaArea.coordinates.y / 100.0 * referenceSize.height)
-                            let cornerRadius = size.height * 0.18
-                            
-                            let layer = CALayer()
-                            layer.backgroundColor = UIColor.white.cgColor
-                            layer.bounds = CGRect(origin: .zero, size: size)
-                            layer.position = position
-                            layer.cornerRadius = cornerRadius
-                            maskLayer.addSublayer(layer)
-                            
-                            let borderLayer = CAShapeLayer()
-                            borderLayer.strokeColor = UIColor.white.cgColor
-                            borderLayer.fillColor = UIColor.clear.cgColor
-                            borderLayer.lineWidth = 2.0
-                            borderLayer.path = CGPath(roundedRect: CGRect(origin: .zero, size: size), cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
-                            borderLayer.bounds = CGRect(origin: .zero, size: size)
-                            borderLayer.position = position
-                            mediaAreasEffectView.borderMaskLayer.addSublayer(borderLayer)
-                            
-                            layer.transform = CATransform3DMakeRotation(mediaArea.coordinates.rotation * Double.pi / 180.0, 0.0, 0.0, 1.0)
-                            borderLayer.transform = layer.transform
-                        }
-                    }
+                    maskLayer.update(referenceSize: availableSize, mediaAreas: shimmeringMediaAreas, borderMaskLayer: mediaAreasEffectView.borderMaskLayer)
                 } else if let mediaAreasEffectView = self.mediaAreasEffectView {
                     self.mediaAreasEffectView = nil
                     mediaAreasEffectView.removeFromSuperview()
@@ -980,7 +966,7 @@ final class StoryItemContentComponent: Component {
 		return View(frame: CGRect())
 	}
 
-    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<StoryContentItem.Environment>, transition: Transition) -> CGSize {
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<StoryContentItem.Environment>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }

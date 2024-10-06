@@ -127,13 +127,13 @@ public class DrawingReactionEntityView: DrawingStickerEntityView {
             reactionContextNode.updateLayout(size: availableSize, insets: insets, anchorRect: anchorRect, centerAligned: true, isCoveredByInput: false, isAnimatingOut: false, transition: transition)
         }
         
-        let reactionContextNodeTransition: Transition = .immediate
+        let reactionContextNodeTransition: ComponentTransition = .immediate
         let reactionContextNode: ReactionContextNode
         reactionContextNode = ReactionContextNode(
             context: self.context,
             animationCache: self.context.animationCache,
             presentationData: self.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: defaultDarkPresentationTheme),
-            items: reactionItems.map(ReactionContextItem.reaction),
+            items: reactionItems.map { ReactionContextItem.reaction(item: $0, icon: .none) },
             selectedItems: Set(),
             title: nil,
             reactionsLocked: false,
@@ -264,6 +264,24 @@ public class DrawingReactionEntityView: DrawingStickerEntityView {
                         }
                     })
                 }
+            case .stars:
+                let _ = (self.context.engine.stickers.availableReactions()
+                |> take(1)
+                |> deliverOnMainQueue).start(next: { availableReactions in
+                    guard let availableReactions else {
+                        return
+                    }
+                    var animation: TelegramMediaFile?
+                    for reaction in availableReactions.reactions {
+                        if reaction.value == updateReaction.reaction {
+                            animation = reaction.selectAnimation
+                            break
+                        }
+                    }
+                    if let animation {
+                        continueWithAnimationFile(animation)
+                    }
+                })
             }
         }
         

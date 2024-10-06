@@ -125,6 +125,14 @@ extension ChatControllerImpl {
             return
         }
         
+        var deleteAllMessageCount: Signal<Int?, NoError> = .single(nil)
+        if authors.count == 1 {
+            deleteAllMessageCount = self.context.engine.messages.searchMessages(location: .peer(peerId: peerId, fromId: authors[0].id, tags: nil, reactions: nil, threadId: self.chatLocation.threadId, minDate: nil, maxDate: nil), query: "", state: nil)
+            |> map { result, _ -> Int? in
+                return Int(result.totalCount)
+            }
+        }
+        
         var signal = combineLatest(authors.map { author in
             self.context.engine.peers.fetchChannelParticipant(peerId: peerId, participantId: author.id)
             |> map { result -> (Peer, ChannelParticipant?) in
@@ -161,8 +169,8 @@ extension ChatControllerImpl {
             disposables.set(nil)
         }
         
-        disposables.set((signal
-        |> deliverOnMainQueue).startStrict(next: { [weak self] authorsAndParticipants in
+        disposables.set((combineLatest(signal, deleteAllMessageCount)
+        |> deliverOnMainQueue).startStrict(next: { [weak self] authorsAndParticipants, deleteAllMessageCount in
             guard let self else {
                 return
             }
@@ -188,7 +196,7 @@ extension ChatControllerImpl {
                             restrictedBy: self.context.account.peerId,
                             timestamp: 0,
                             isMember: false
-                        ), rank: nil)
+                        ), rank: nil, subscriptionUntilDate: nil)
                     }
                     
                     let peer = author
@@ -199,7 +207,7 @@ extension ChatControllerImpl {
                     switch participant {
                     case .creator:
                         break
-                    case let .member(_, _, _, banInfo, _):
+                    case let .member(_, _, _, banInfo, _, _):
                         if let banInfo {
                             initialUserBannedRights[participant.peerId] = InitialBannedRights(value: banInfo.rights)
                         } else {
@@ -212,6 +220,7 @@ extension ChatControllerImpl {
                     chatPeer: chatPeer,
                     peers: renderedParticipants,
                     messageCount: messageIds.count,
+                    deleteAllMessageCount: deleteAllMessageCount,
                     completion: { [weak self] result in
                         guard let self else {
                             return
@@ -259,8 +268,16 @@ extension ChatControllerImpl {
             disposables.set(nil)
         }
         
-        disposables.set((signal
-        |> deliverOnMainQueue).startStrict(next: { [weak self] maybeParticipant in
+        var deleteAllMessageCount: Signal<Int?, NoError> = .single(nil)
+        do {
+            deleteAllMessageCount = self.context.engine.messages.getSearchMessageCount(location: .peer(peerId: peerId, fromId: author.id, tags: nil, reactions: nil, threadId: self.chatLocation.threadId, minDate: nil, maxDate: nil), query: "")
+            |> map { result -> Int? in
+                return result
+            }
+        }
+        
+        disposables.set((combineLatest(signal, deleteAllMessageCount)
+        |> deliverOnMainQueue).startStrict(next: { [weak self] maybeParticipant, deleteAllMessageCount in
             guard let self else {
                 return
             }
@@ -277,7 +294,7 @@ extension ChatControllerImpl {
                     restrictedBy: self.context.account.peerId,
                     timestamp: 0,
                     isMember: false
-                ), rank: nil)
+                ), rank: nil, subscriptionUntilDate: nil)
             }
             
             let _ = (self.context.engine.data.get(
@@ -295,7 +312,7 @@ extension ChatControllerImpl {
                 switch participant {
                 case .creator:
                     break
-                case let .member(_, _, _, banInfo, _):
+                case let .member(_, _, _, banInfo, _, _):
                     if let banInfo {
                         initialUserBannedRights[participant.peerId] = InitialBannedRights(value: banInfo.rights)
                     } else {
@@ -310,6 +327,7 @@ extension ChatControllerImpl {
                         peer: authorPeer._asPeer()
                     )],
                     messageCount: messageIds.count,
+                    deleteAllMessageCount: deleteAllMessageCount,
                     completion: { [weak self] result in
                         guard let self else {
                             return
@@ -319,88 +337,39 @@ extension ChatControllerImpl {
                 ))
             })
         }))
+    }
+    
+    func beginDeleteMessagesWithUndo(messageIds: Set<MessageId>, type: InteractiveMessagesDeletionType) {
+        var deleteImmediately = false
+        if case .forEveryone = type {
+            deleteImmediately = true
+        } else if case .scheduledMessages = self.presentationInterfaceState.subject {
+            deleteImmediately = true
+        } else if case .peer(self.context.account.peerId) = self.chatLocation {
+            deleteImmediately = true
+        }
         
-        /*do {
-            self.navigationActionDisposable.set((self.context.engine.peers.fetchChannelParticipant(peerId: peerId, participantId: author.id)
-            |> deliverOnMainQueue).startStrict(next: {
-                if let strongSelf = self {
-                    if "".isEmpty {
-                        
-                        return
-                    }
-                    
-                    let canBan = participant?.canBeBannedBy(peerId: accountPeerId) ?? true
-                    
-                    let actionSheet = ActionSheetController(presentationData: strongSelf.presentationData)
-                    var items: [ActionSheetItem] = []
-                    
-                    var actions = Set<Int>([0])
-                    
-                    let toggleCheck: (Int, Int) -> Void = { [weak actionSheet] category, itemIndex in
-                        if actions.contains(category) {
-                            actions.remove(category)
-                        } else {
-                            actions.insert(category)
-                        }
-                        actionSheet?.updateItem(groupIndex: 0, itemIndex: itemIndex, { item in
-                            if let item = item as? ActionSheetCheckboxItem {
-                                return ActionSheetCheckboxItem(title: item.title, label: item.label, value: !item.value, action: item.action)
-                            }
-                            return item
-                        })
-                    }
-                    
-                    var itemIndex = 0
-                    var categories: [Int] = [0]
-                    if canBan {
-                        categories.append(1)
-                    }
-                    categories.append(contentsOf: [2, 3])
-                    
-                    for categoryId in categories as [Int] {
-                        var title = ""
-                        if categoryId == 0 {
-                            title = strongSelf.presentationData.strings.Conversation_Moderate_Delete
-                        } else if categoryId == 1 {
-                            title = strongSelf.presentationData.strings.Conversation_Moderate_Ban
-                        } else if categoryId == 2 {
-                            title = strongSelf.presentationData.strings.Conversation_Moderate_Report
-                        } else if categoryId == 3 {
-                            title = strongSelf.presentationData.strings.Conversation_Moderate_DeleteAllMessages(EnginePeer(author).displayTitle(strings: strongSelf.presentationData.strings, displayOrder: strongSelf.presentationData.nameDisplayOrder)).string
-                        }
-                        let index = itemIndex
-                        items.append(ActionSheetCheckboxItem(title: title, label: "", value: actions.contains(categoryId), action: { value in
-                            toggleCheck(categoryId, index)
-                        }))
-                        itemIndex += 1
-                    }
-                    
-                    items.append(ActionSheetButtonItem(title: strongSelf.presentationData.strings.Common_Done, action: { [weak self, weak actionSheet] in
-                        actionSheet?.dismissAnimated()
-                        if let strongSelf = self {
-                            strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
-                            if actions.contains(3) {
-                                let _ = strongSelf.context.engine.messages.deleteAllMessagesWithAuthor(peerId: peerId, authorId: author.id, namespace: Namespaces.Message.Cloud).startStandalone()
-                                let _ = strongSelf.context.engine.messages.clearAuthorHistory(peerId: peerId, memberId: author.id).startStandalone()
-                            } else if actions.contains(0) {
-                                let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone).startStandalone()
-                            }
-                            if actions.contains(1) {
-                                let _ = strongSelf.context.engine.peers.removePeerMember(peerId: peerId, memberId: author.id).startStandalone()
-                            }
-                        }
-                    }))
-                    
-                    actionSheet.setItemGroups([ActionSheetItemGroup(items: items), ActionSheetItemGroup(items: [
-                        ActionSheetButtonItem(title: strongSelf.presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
-                            actionSheet?.dismissAnimated()
-                        })
-                    ])])
-                    strongSelf.chatDisplayNode.dismissInput()
-                    strongSelf.present(actionSheet, in: .window(.root))
-                }
-            }))
-        }*/
+        if deleteImmediately {
+            let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: type).startStandalone()
+            return
+        }
+        
+        self.chatDisplayNode.historyNode.ignoreMessageIds = Set(messageIds)
+        
+        let undoTitle = self.presentationData.strings.Chat_MessagesDeletedToast_Text(Int32(messageIds.count))
+        self.present(UndoOverlayController(presentationData: self.context.sharedContext.currentPresentationData.with { $0 }, content: .removedChat(title: undoTitle, text: nil), elevatedLayout: false, position: .top, action: { [weak self] value in
+            guard let self else {
+                return false
+            }
+            if value == .commit {
+                let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: type).startStandalone()
+                return true
+            } else if value == .undo {
+                self.chatDisplayNode.historyNode.ignoreMessageIds = Set()
+                return true
+            }
+            return false
+        }), in: .current)
     }
     
     func presentDeleteMessageOptions(messageIds: Set<MessageId>, options: ChatAvailableMessageActionOptions, contextController: ContextControllerProtocol?, completion: @escaping (ContextMenuActionResult) -> Void) {
@@ -429,7 +398,7 @@ extension ChatControllerImpl {
                     actionSheet?.dismissAnimated()
                     if let strongSelf = self {
                         strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
-                        let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone).startStandalone()
+                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone)
                     }
                 }))
             }
@@ -466,7 +435,8 @@ extension ChatControllerImpl {
                         }
                         let commit = {
                             strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
-                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone).startStandalone()
+                            
+                            strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone)
                         }
                         if let giveaway {
                             let currentTime = Int32(CFAbsoluteTimeGetCurrent() + kCFAbsoluteTimeIntervalSince1970)
@@ -488,7 +458,7 @@ extension ChatControllerImpl {
                                 f(.dismissWithoutContent)
                                 commit()
                             } else {
-                                c.dismiss(completion: {
+                                c?.dismiss(completion: {
                                     DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.1, execute: {
                                         commit()
                                     })
@@ -501,7 +471,8 @@ extension ChatControllerImpl {
                     actionSheet?.dismissAnimated()
                     if let strongSelf = self {
                         strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
-                        let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone).startStandalone()
+                        
+                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone)
                     }
                 }))
             }
@@ -534,14 +505,14 @@ extension ChatControllerImpl {
                             guard let strongSelf = self else {
                                 return
                             }
-                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: unsendPersonalMessages ? .forEveryone : .forLocalPeer).startStandalone()
+                            strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: unsendPersonalMessages ? .forEveryone : .forLocalPeer)
                         }
                         
                         if "".isEmpty {
                             f(.dismissWithoutContent)
                             commit()
                         } else {
-                            c.dismiss(completion: {
+                            c?.dismiss(completion: {
                                 DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.1, execute: {
                                     commit()
                                 })
@@ -553,8 +524,8 @@ extension ChatControllerImpl {
                     actionSheet?.dismissAnimated()
                     if let strongSelf = self {
                         strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
-                        let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: unsendPersonalMessages ? .forEveryone : .forLocalPeer).startStandalone()
                         
+                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: unsendPersonalMessages ? .forEveryone : .forLocalPeer)
                     }
                 }))
             }

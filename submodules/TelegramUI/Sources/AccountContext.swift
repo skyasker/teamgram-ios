@@ -127,6 +127,7 @@ public final class AccountContextImpl: AccountContext {
     public let wallpaperUploadManager: WallpaperUploadManager?
     private let themeUpdateManager: ThemeUpdateManager?
     public let inAppPurchaseManager: InAppPurchaseManager?
+    public let starsContext: StarsContext?
     
     public let peerChannelMemberCategoriesContextsManager = PeerChannelMemberCategoriesContextsManager()
     
@@ -241,6 +242,19 @@ public final class AccountContextImpl: AccountContext {
         return availableReactionsValue.get()
     }
     
+    private var availableMessageEffectsValue: Promise<AvailableMessageEffects?>?
+    public var availableMessageEffects: Signal<AvailableMessageEffects?, NoError> {
+        let availableMessageEffectsValue: Promise<AvailableMessageEffects?>
+        if let current = self.availableMessageEffectsValue {
+            availableMessageEffectsValue = current
+        } else {
+            availableMessageEffectsValue = Promise<AvailableMessageEffects?>()
+            self.availableMessageEffectsValue = availableMessageEffectsValue
+            availableMessageEffectsValue.set(self.engine.stickers.availableMessageEffects())
+        }
+        return availableMessageEffectsValue.get()
+    }
+    
     private var userLimitsConfigurationDisposable: Disposable?
     public private(set) var userLimits: EngineConfiguration.UserLimits
     
@@ -281,18 +295,18 @@ public final class AccountContextImpl: AccountContext {
             self.themeUpdateManager = ThemeUpdateManagerImpl(sharedContext: sharedContext, account: account)
             
             self.inAppPurchaseManager = InAppPurchaseManager(engine: self.engine)
+            self.starsContext = self.engine.payments.peerStarsContext()
         } else {
             self.prefetchManager = nil
             self.wallpaperUploadManager = nil
             self.themeUpdateManager = nil
             self.inAppPurchaseManager = nil
+            self.starsContext = nil
         }
         
-        if let locationManager = self.sharedContextImpl.locationManager, sharedContext.applicationBindings.isMainApp && !temp {
-            self.peersNearbyManager = PeersNearbyManagerImpl(account: account, engine: self.engine, locationManager: locationManager, inForeground: sharedContext.applicationBindings.applicationInForeground)
-        } else {
-            self.peersNearbyManager = nil
-        }
+        self.account.stateManager.starsContext = self.starsContext
+        
+        self.peersNearbyManager = nil
         
         self.cachedGroupCallContexts = AccountGroupCallContextCacheImpl()
         
@@ -564,8 +578,8 @@ public final class AccountContextImpl: AccountContext {
         }
     }
     
-    public func scheduleGroupCall(peerId: PeerId) {
-        let _ = self.sharedContext.callManager?.scheduleGroupCall(context: self, peerId: peerId, endCurrentIfAny: true)
+    public func scheduleGroupCall(peerId: PeerId, parentController: ViewController) {
+        let _ = self.sharedContext.callManager?.scheduleGroupCall(context: self, peerId: peerId, endCurrentIfAny: true, parentController: parentController)
     }
     
     public func joinGroupCall(peerId: PeerId, invite: String?, requestJoinAsPeerId: ((@escaping (PeerId?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {

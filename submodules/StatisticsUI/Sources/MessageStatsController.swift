@@ -160,7 +160,7 @@ private enum StatsEntry: ItemListNodeEntry {
                  let .publicForwardsTitle(_, text):
                 return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
             case let .overview(_, stats, storyViews, publicShares):
-                return StatsOverviewItem(context: arguments.context, presentationData: presentationData, isGroup: false, stats: stats as! Stats, storyViews: storyViews, publicShares: publicShares, sectionId: self.section, style: .blocks)
+                return StatsOverviewItem(context: arguments.context, presentationData: presentationData, isGroup: false, stats: stats as? Stats, storyViews: storyViews, publicShares: publicShares, sectionId: self.section, style: .blocks)
             case let .interactionsGraph(_, _, _, graph, type, noInitialZoom), let .reactionsGraph(_, _, _, graph, type, noInitialZoom):
                 return StatsGraphItem(presentationData: presentationData, graph: graph, type: type, noInitialZoom: noInitialZoom, getDetailsData: { date, completion in
                     let _ = arguments.loadDetailedGraph(graph, Int64(date.timeIntervalSince1970) * 1000).start(next: { graph in
@@ -450,7 +450,7 @@ public func messageStatsController(context: AccountContext, updatedPresentationD
                 return
             }
             if let navigationController = controller?.navigationController as? NavigationController {
-                context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil), keepStack: .always, useExisting: false, purposefulAction: {}, peekData: nil))
+                context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false), keepStack: .always, useExisting: false, purposefulAction: {}, peekData: nil))
             }
         })
     }
@@ -539,7 +539,7 @@ public func messageStatsController(context: AccountContext, updatedPresentationD
         }
         
         items.append(.action(ContextMenuActionItem(text: title, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: iconName), color: theme.contextMenu.primaryColor) }, action: { [weak controller] c, _ in
-            c.dismiss(completion: {
+            c?.dismiss(completion: {
                 let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
                 |> deliverOnMainQueue).start(next: { peer in
                     guard let peer = peer, let navigationController = controller?.navigationController as? NavigationController else {

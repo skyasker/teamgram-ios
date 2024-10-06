@@ -267,6 +267,8 @@ final class EmojiSearchSearchBarComponent: Component {
         private var highlightedItem: AnyHashable?
         private var selectedItem: AnyHashable?
         
+        private var disableInteraction: Bool = false
+        
         private lazy var hapticFeedback: HapticFeedback = {
             return HapticFeedback()
         }()
@@ -383,7 +385,7 @@ final class EmojiSearchSearchBarComponent: Component {
                                     }
                                 }
                             } else {
-                                let transition = Transition(animation: .curve(duration: 0.4, curve: .spring))
+                                let transition = ComponentTransition(animation: .curve(duration: 0.4, curve: .spring))
                                 transition.setBoundsOrigin(view: self.scrollView, origin: CGPoint())
                                 self.updateScrolling(transition: transition, fromScrolling: false)
                                 //self.scrollView.setContentOffset(CGPoint(), animated: true)
@@ -402,7 +404,7 @@ final class EmojiSearchSearchBarComponent: Component {
             if self.selectedItem != nil {
                 self.selectedItem = nil
                 
-                let transition = Transition(animation: .curve(duration: 0.4, curve: .spring))
+                let transition = ComponentTransition(animation: .curve(duration: 0.4, curve: .spring))
                 transition.setBoundsOrigin(view: self.scrollView, origin: CGPoint())
                 self.updateScrolling(transition: transition, fromScrolling: false)
                 
@@ -420,15 +422,43 @@ final class EmojiSearchSearchBarComponent: Component {
             }
         }
         
-        private func updateScrolling(transition: Transition, fromScrolling: Bool) {
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            if self.disableInteraction {
+                for (_, itemView) in self.visibleItemViews {
+                    if let itemComponentView = itemView.view.view {
+                        if itemComponentView.bounds.contains(self.convert(point, to: itemComponentView)) {
+                            return self
+                        }
+                    }
+                }
+                return nil
+            }
+            
+            return super.hitTest(point, with: event)
+        }
+        
+        func leftTextPosition() -> CGFloat {
+            guard let itemLayout = self.itemLayout else {
+                return 0.0
+            }
+            
+            let visibleBounds = self.scrollView.bounds
+            return (itemLayout.itemStartX - itemLayout.textSpacing) + visibleBounds.minX
+        }
+        
+        private func updateScrolling(transition: ComponentTransition, fromScrolling: Bool) {
             guard let component = self.component, let itemLayout = self.itemLayout else {
                 return
             }
             
             let itemAlpha: CGFloat
             switch component.textInputState {
-            case .active:
-                itemAlpha = 0.0
+            case let .active(hasText):
+                if hasText {
+                    itemAlpha = 0.0
+                } else {
+                    itemAlpha = 1.0
+                }
             case .inactive:
                 itemAlpha = 1.0
             }
@@ -578,8 +608,8 @@ final class EmojiSearchSearchBarComponent: Component {
                     self.selectedItemBackground.opacity = 1.0
                     self.selectedItemTintBackground.opacity = 1.0
                     
-                    Transition.immediate.setScale(layer: self.selectedItemBackground, scale: 1.0)
-                    Transition.immediate.setScale(layer: self.selectedItemTintBackground, scale: 1.0)
+                    ComponentTransition.immediate.setScale(layer: self.selectedItemBackground, scale: 1.0)
+                    ComponentTransition.immediate.setScale(layer: self.selectedItemTintBackground, scale: 1.0)
                     
                     if !transition.animation.isImmediate {
                         self.selectedItemBackground.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
@@ -594,8 +624,8 @@ final class EmojiSearchSearchBarComponent: Component {
                         transition.setPosition(layer: self.selectedItemTintBackground, position: selectionFrame.center)
                         
                         if case let .curve(duration, _) = transition.animation {
-                            Transition.immediate.setScale(layer: self.selectedItemBackground, scale: 1.0)
-                            Transition.immediate.setScale(layer: self.selectedItemTintBackground, scale: 1.0)
+                            ComponentTransition.immediate.setScale(layer: self.selectedItemBackground, scale: 1.0)
+                            ComponentTransition.immediate.setScale(layer: self.selectedItemTintBackground, scale: 1.0)
                             
                             self.selectedItemBackground.animateKeyframes(values: [1.0 as NSNumber, 0.75 as NSNumber, 1.0 as NSNumber], duration: duration, keyPath: "transform.scale")
                             self.selectedItemTintBackground.animateKeyframes(values: [1.0 as NSNumber, 0.75 as NSNumber, 1.0 as NSNumber], duration: duration, keyPath: "transform.scale")
@@ -622,7 +652,7 @@ final class EmojiSearchSearchBarComponent: Component {
             transition.setBounds(view: self.tintTextContainerView, bounds: CGRect(origin: CGPoint(x: textOffset, y: 0.0), size: scrollBounds.size))
         }
         
-        func update(component: EmojiSearchSearchBarComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: EmojiSearchSearchBarComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.component = component
             self.componentState = state
             
@@ -674,7 +704,7 @@ final class EmojiSearchSearchBarComponent: Component {
             if self.scrollView.bounds.size != availableSize {
                 transition.setFrame(view: self.scrollView, frame: CGRect(origin: CGPoint(), size: availableSize))
             }
-            if case .active = component.textInputState {
+            if case .active(true) = component.textInputState {
                 transition.setBoundsOrigin(view: self.scrollView, origin: CGPoint())
             }
             if self.scrollView.contentSize != itemLayout.contentSize {
@@ -692,10 +722,17 @@ final class EmojiSearchSearchBarComponent: Component {
             
             switch component.textInputState {
             case let .active(hasText):
-                self.isUserInteractionEnabled = false
+                if hasText {
+                    self.disableInteraction = false
+                    self.isUserInteractionEnabled = false
+                } else {
+                    self.disableInteraction = true
+                    self.isUserInteractionEnabled = true
+                }
                 self.textView.view?.isHidden = hasText
                 self.tintTextView.view?.isHidden = hasText
             case .inactive:
+                self.disableInteraction = false
                 self.isUserInteractionEnabled = true
                 self.textView.view?.isHidden = false
                 self.tintTextView.view?.isHidden = false
@@ -709,7 +746,7 @@ final class EmojiSearchSearchBarComponent: Component {
         return View(frame: CGRect())
     }
     
-    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }

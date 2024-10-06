@@ -77,6 +77,10 @@ public final class MessageReactionButtonsNode: ASDisplayNode {
                 selectedBackground: themeColors.reactionActiveBackground.argb,
                 deselectedForeground: themeColors.reactionInactiveForeground.argb,
                 selectedForeground: themeColors.reactionActiveForeground.argb,
+                deselectedStarsBackground: themeColors.reactionStarsInactiveBackground.argb,
+                selectedStarsBackground: themeColors.reactionStarsActiveBackground.argb,
+                deselectedStarsForeground: themeColors.reactionStarsInactiveForeground.argb,
+                selectedStarsForeground: themeColors.reactionStarsActiveForeground.argb,
                 extractedBackground: presentationData.theme.theme.contextMenu.backgroundColor.argb,
                 extractedForeground: presentationData.theme.theme.contextMenu.primaryColor.argb,
                 extractedSelectedForeground: presentationData.theme.theme.overallDarkAppearance ? themeColors.reactionActiveForeground.argb : presentationData.theme.theme.list.itemCheckColors.foregroundColor.argb,
@@ -90,6 +94,10 @@ public final class MessageReactionButtonsNode: ASDisplayNode {
                 selectedBackground: themeColors.reactionActiveBackground.argb,
                 deselectedForeground: themeColors.reactionInactiveForeground.argb,
                 selectedForeground: themeColors.reactionActiveForeground.argb,
+                deselectedStarsBackground: themeColors.reactionStarsInactiveBackground.argb,
+                selectedStarsBackground: themeColors.reactionStarsActiveBackground.argb,
+                deselectedStarsForeground: themeColors.reactionStarsInactiveForeground.argb,
+                selectedStarsForeground: themeColors.reactionStarsActiveForeground.argb,
                 extractedBackground: presentationData.theme.theme.contextMenu.backgroundColor.argb,
                 extractedForeground: presentationData.theme.theme.contextMenu.primaryColor.argb,
                 extractedSelectedForeground: presentationData.theme.theme.overallDarkAppearance ? themeColors.reactionActiveForeground.argb : presentationData.theme.theme.list.itemCheckColors.foregroundColor.argb,
@@ -108,6 +116,10 @@ public final class MessageReactionButtonsNode: ASDisplayNode {
                 selectedBackground: themeColors.reactionActiveBackground.argb,
                 deselectedForeground: themeColors.reactionInactiveForeground.argb,
                 selectedForeground: themeColors.reactionActiveForeground.argb,
+                deselectedStarsBackground: selectReactionFillStaticColor(theme: presentationData.theme.theme, wallpaper: presentationData.theme.wallpaper, isStars: true).argb,
+                selectedStarsBackground: themeColors.reactionStarsActiveBackground.argb,
+                deselectedStarsForeground: themeColors.reactionStarsInactiveForeground.argb,
+                selectedStarsForeground: themeColors.reactionStarsActiveForeground.argb,
                 extractedBackground: presentationData.theme.theme.contextMenu.backgroundColor.argb,
                 extractedForeground: presentationData.theme.theme.contextMenu.primaryColor.argb,
                 extractedSelectedForeground: presentationData.theme.theme.contextMenu.primaryColor.argb,
@@ -147,6 +159,15 @@ public final class MessageReactionButtonsNode: ASDisplayNode {
                     }
                 case let .custom(fileId):
                     animationFileId = fileId
+                case .stars:
+                    if let availableReactions = availableReactions {
+                        for availableReaction in availableReactions.reactions {
+                            if availableReaction.value == reaction.value {
+                                centerAnimation = availableReaction.centerAnimation
+                                break
+                            }
+                        }
+                    }
                 }
                 
                 var peers: [EnginePeer] = []
@@ -350,14 +371,11 @@ public final class MessageReactionButtonsNode: ASDisplayNode {
                     let itemValue = item.value
                     let itemNode = item.node
                     item.node.view.isGestureEnabled = true
-                    let canViewReactionList = canViewMessageReactionList(message: message, isInline: associatedData.isInline)
+                    let canViewReactionList = canViewMessageReactionList(message: message)
                     item.node.view.activateAfterCompletion = !canViewReactionList
                     item.node.view.activated = { [weak itemNode] gesture, _ in
                         guard let strongSelf = self, let itemNode = itemNode else {
                             gesture.cancel()
-                            return
-                        }
-                        if !canViewReactionList {
                             return
                         }
                         strongSelf.openReactionPreview?(gesture, itemNode.view.containerView, itemValue)
@@ -521,7 +539,7 @@ public final class ChatMessageReactionsFooterContentNode: ChatMessageBubbleConte
             }
             
             return (contentProperties, nil, CGFloat.greatestFiniteMagnitude, { constrainedSize, position in
-                let reactionsAttribute = mergedMessageReactions(attributes: item.message.attributes, isTags: item.message.areReactionsTags(accountPeerId: item.context.account.peerId)) ?? ReactionsMessageAttribute(canViewList: false, isTags: false, reactions: [], recentPeers: [])
+                let reactionsAttribute = mergedMessageReactions(attributes: item.message.attributes, isTags: item.message.areReactionsTags(accountPeerId: item.context.account.peerId)) ?? ReactionsMessageAttribute(canViewList: false, isTags: false, reactions: [], recentPeers: [], topPeers: [])
                 let buttonsUpdate = buttonsNode.prepareUpdate(
                     context: item.context,
                     presentationData: item.presentationData,

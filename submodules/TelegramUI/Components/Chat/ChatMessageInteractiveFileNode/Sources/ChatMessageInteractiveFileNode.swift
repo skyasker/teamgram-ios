@@ -650,7 +650,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                 let messageTheme = arguments.incoming ? arguments.presentationData.theme.theme.chat.message.incoming : arguments.presentationData.theme.theme.chat.message.outgoing
                 let isInstantVideo = arguments.file.isInstantVideo
                 for attribute in arguments.file.attributes {
-                    if case let .Video(videoDuration, _, flags, _) = attribute, flags.contains(.instantRoundVideo) {
+                    if case let .Video(videoDuration, _, flags, _, _, _) = attribute, flags.contains(.instantRoundVideo) {
                         isAudio = true
                         isVoice = true
                         
@@ -943,10 +943,11 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                         reactionPeers: dateReactionsAndPeers.peers,
                         displayAllReactionPeers: arguments.message.id.peerId.namespace == Namespaces.Peer.CloudUser,
                         areReactionsTags: arguments.message.areReactionsTags(accountPeerId: arguments.context.account.peerId),
+                        messageEffect: arguments.message.messageEffect(availableMessageEffects: arguments.associatedData.availableMessageEffects),
                         replyCount: dateReplies,
                         isPinned: arguments.isPinned && !arguments.associatedData.isInPinnedListMode,
                         hasAutoremove: arguments.message.isSelfExpiring,
-                        canViewReactionList: canViewMessageReactionList(message: arguments.topMessage, isInline: arguments.associatedData.isInline),
+                        canViewReactionList: canViewMessageReactionList(message: arguments.topMessage),
                         animationCache: arguments.controllerInteraction.presentationContext.animationCache,
                         animationRenderer: arguments.controllerInteraction.presentationContext.animationRenderer
                     ))
@@ -1261,7 +1262,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                                 }
                                 
                                 let waveformView: ComponentHostView<Empty>
-                                let waveformTransition: Transition
+                                let waveformTransition: ComponentTransition
                                 if let current = strongSelf.waveformView {
                                     waveformView = current
                                     switch animation.transition {
@@ -1557,7 +1558,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
         var isVoice = false
         var audioDuration: Int32?
         for attribute in file.attributes {
-            if case let .Video(duration, _, flags, _) = attribute, flags.contains(.instantRoundVideo) {
+            if case let .Video(duration, _, flags, _, _, _) = attribute, flags.contains(.instantRoundVideo) {
                 isAudio = true
                 isVoice = true
                 audioDuration = Int32(duration)

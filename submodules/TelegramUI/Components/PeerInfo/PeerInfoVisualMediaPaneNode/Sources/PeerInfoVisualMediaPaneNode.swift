@@ -331,6 +331,10 @@ private final class GenericItemLayer: CALayer, ItemLayer {
 
         self.contentsGravity = .resize
     }
+    
+    override init(layer: Any) {
+        super.init(layer: layer)
+    }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -705,7 +709,8 @@ private final class SparseItemGridBindingImpl: SparseItemGridBinding, ListShimme
                 immediateThumbnailData: nil,
                 mimeType: "image/jpeg",
                 size: nil,
-                attributes: [.FileName(fileName: "file")]
+                attributes: [.FileName(fileName: "file")],
+                alternativeRepresentations: []
             )
             let fakeMessage = Message(
                 stableId: 1,
@@ -866,7 +871,10 @@ private final class SparseItemGridBindingImpl: SparseItemGridBinding, ListShimme
                 }
 
                 let message = item.message
-                let hasSpoiler = message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) && !self.revealedSpoilerMessageIds.contains(message.id)
+                var hasSpoiler = message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) && !self.revealedSpoilerMessageIds.contains(message.id)
+                if message.isSensitiveContent(platform: "ios") {
+                    hasSpoiler = true
+                }
                 layer.updateHasSpoiler(hasSpoiler: hasSpoiler)
                 
                 var selectedMedia: Media?
@@ -995,6 +1003,9 @@ private final class SparseItemGridBindingImpl: SparseItemGridBinding, ListShimme
             return .never()
         }
     }
+    
+    func reorderIfPossible(item: SparseItemGrid.Item, toIndex: Int) {
+    }
 
     func onTap(item: SparseItemGrid.Item, itemLayer: CALayer, point: CGPoint) {
         guard let item = item as? VisualMediaItem else {
@@ -1013,6 +1024,9 @@ private final class SparseItemGridBindingImpl: SparseItemGridBinding, ListShimme
 
     func coveringInsetOffsetUpdated(transition: ContainedViewLayoutTransition) {
         self.coveringInsetOffsetUpdatedImpl?(transition)
+    }
+    
+    func scrollingOffsetUpdated(transition: ContainedViewLayoutTransition) {
     }
 
     func onBeginFastScrolling() {
@@ -1192,7 +1206,7 @@ public final class PeerInfoVisualMediaPaneNode: ASDisplayNode, PeerInfoPaneNode,
                 chatControllerInteraction.openInstantPage(message, data)
             },
             longTap: { action, message in
-                chatControllerInteraction.longTap(action, message)
+                chatControllerInteraction.longTap(action, ChatControllerInteraction.LongTapParams(message: message))
             },
             getHiddenMedia: {
                 return chatControllerInteraction.hiddenMedia
@@ -1262,7 +1276,11 @@ public final class PeerInfoVisualMediaPaneNode: ASDisplayNode, PeerInfoPaneNode,
                 }
                 strongSelf.chatControllerInteraction.toggleMessagesSelection([item.message.id], toggledValue)
             } else {
-                let _ = strongSelf.chatControllerInteraction.openMessage(item.message, OpenMessageParams(mode: .default))
+                if item.message.isSensitiveContent(platform: "ios") {
+//                    strongSelf.context.currentContentSettings.with { $0 }.ignoreContentRestrictionReasons
+                } else {
+                    let _ = strongSelf.chatControllerInteraction.openMessage(item.message, OpenMessageParams(mode: .default))
+                }
             }
         }
 
@@ -2116,7 +2134,8 @@ public final class PeerInfoVisualMediaPaneNode: ASDisplayNode, PeerInfoPaneNode,
                     immediateThumbnailData: nil,
                     mimeType: "image/jpeg",
                     size: nil,
-                    attributes: [.FileName(fileName: "file")]
+                    attributes: [.FileName(fileName: "file")],
+                    alternativeRepresentations: []
                 )
                 let fakeMessage = Message(
                     stableId: 1,

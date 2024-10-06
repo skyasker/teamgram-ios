@@ -110,6 +110,13 @@ swift_library(
         "//submodules/TinyThumbnail",
         "//submodules/ImageBlur",
         "//submodules/MetalEngine",
+        "//submodules/TelegramUI/Components/Calls/VoiceChatActionButton",
+        "//submodules/TelegramUI/Components/PlainButtonComponent",
+        "//submodules/TelegramUI/Components/LottieComponent",
+        "//submodules/TelegramUI/Components/Stories/PeerListItemComponent",
+        "//submodules/TelegramUI/Components/BackButtonComponent",
+        "//submodules/DirectMediaImageCache",
+        "//submodules/FastBlur",
     ],
     visibility = [
         "//visibility:public",

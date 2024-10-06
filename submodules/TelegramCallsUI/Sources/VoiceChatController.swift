@@ -32,6 +32,7 @@ import MapResourceToAvatarSizes
 import SolidRoundedButtonNode
 import AudioBlob
 import DeviceAccess
+import VoiceChatActionButton
 
 let panelBackgroundColor = UIColor(rgb: 0x1c1c1e)
 let secondaryPanelBackgroundColor = UIColor(rgb: 0x2c2c2e)
@@ -244,11 +245,13 @@ public protocol VoiceChatController: ViewController {
     var call: PresentationGroupCall { get }
     var currentOverlayController: VoiceChatOverlayController? { get }
     var parentNavigationController: NavigationController? { get set }
+    var onViewDidAppear: (() -> Void)? { get set }
+    var onViewDidDisappear: (() -> Void)? { get set }
     
     func dismiss(closing: Bool, manual: Bool)
 }
 
-public final class VoiceChatControllerImpl: ViewController, VoiceChatController {
+final class VoiceChatControllerImpl: ViewController, VoiceChatController {
     enum DisplayMode {
         case modal(isExpanded: Bool, isFilled: Bool)
         case fullscreen(controlsHidden: Bool)
@@ -1253,7 +1256,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                                 } else {
                                     text = strongSelf.presentationData.strings.VoiceChat_InvitedPeerText(peer.displayTitle(strings: strongSelf.presentationData.strings, displayOrder: strongSelf.presentationData.nameDisplayOrder)).string
                                 }
-                                strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: EnginePeer(participant.peer), text: text, action: nil, duration: 3), action: { _ in return false })
+                                strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: EnginePeer(participant.peer), title: nil, text: text, action: nil, duration: 3), action: { _ in return false })
                             }
                         } else {
                             if case let .channel(groupPeer) = groupPeer, let listenerLink = inviteLinks?.listenerLink, !groupPeer.hasPermission(.inviteMembers) {
@@ -1361,7 +1364,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                                                 } else {
                                                     text = strongSelf.presentationData.strings.VoiceChat_InvitedPeerText(peer.displayTitle(strings: strongSelf.presentationData.strings, displayOrder: strongSelf.presentationData.nameDisplayOrder)).string
                                                 }
-                                                strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: peer, text: text, action: nil, duration: 3), action: { _ in return false })
+                                                strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: peer, title: nil, text: text, action: nil, duration: 3), action: { _ in return false })
                                             }
                                         }))
                                     } else if case let .legacyGroup(groupPeer) = groupPeer {
@@ -1429,7 +1432,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                                                 } else {
                                                     text = strongSelf.presentationData.strings.VoiceChat_InvitedPeerText(peer.displayTitle(strings: strongSelf.presentationData.strings, displayOrder: strongSelf.presentationData.nameDisplayOrder)).string
                                                 }
-                                                strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: peer, text: text, action: nil, duration: 3), action: { _ in return false })
+                                                strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: peer, title: nil, text: text, action: nil, duration: 3), action: { _ in return false })
                                             }
                                         }))
                                     }
@@ -1704,7 +1707,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                             items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.VoiceChat_RemovePeer, textColor: .destructive, icon: { theme in
                                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Clear"), color: theme.actionSheet.destructiveActionTextColor)
                             }, action: { [weak self] c, _ in
-                                c.dismiss(completion: {
+                                c?.dismiss(completion: {
                                     guard let strongSelf = self else {
                                         return
                                     }
@@ -2261,7 +2264,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                         return
                     }
                     let text = strongSelf.presentationData.strings.VoiceChat_PeerJoinedText(event.peer.displayTitle(strings: strongSelf.presentationData.strings, displayOrder: strongSelf.presentationData.nameDisplayOrder)).string
-                    strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: event.peer, text: text, action: nil, duration: 3), action: { _ in return false })
+                    strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: event.peer, title: nil, text: text, action: nil, duration: 3), action: { _ in return false })
                 }
             }))
             
@@ -2276,7 +2279,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                 } else {
                     text = strongSelf.presentationData.strings.VoiceChat_DisplayAsSuccess(peer.displayTitle(strings: strongSelf.presentationData.strings, displayOrder: strongSelf.presentationData.nameDisplayOrder)).string
                 }
-                strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: peer, text: text, action: nil, duration: 3), action: { _ in return false })
+                strongSelf.presentUndoOverlay(content: .invitedToVoiceChat(context: strongSelf.context, peer: peer, title: nil, text: text, action: nil, duration: 3), action: { _ in return false })
             }))
 
             self.stateVersionDisposable.set((self.call.stateVersion
@@ -2416,17 +2419,9 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                     } else {
                         if let input = (strongSelf.call as! PresentationGroupCallImpl).video(endpointId: endpointId) {
                             if let videoView = strongSelf.videoRenderingContext.makeView(input: input, blur: false) {
-                                completion(GroupVideoNode(videoView: videoView, backdropVideoView: strongSelf.videoRenderingContext.makeView(input: input, blur: true)))
+                                completion(GroupVideoNode(videoView: videoView, backdropVideoView: strongSelf.videoRenderingContext.makeBlurView(input: input, mainView: videoView)))
                             }
                         }
-
-                        /*strongSelf.call.makeIncomingVideoView(endpointId: endpointId, requestClone: GroupVideoNode.useBlurTransparency, completion: { videoView, backdropVideoView in
-                            if let videoView = videoView {
-                                completion(GroupVideoNode(videoView: videoView, backdropVideoView: backdropVideoView))
-                            } else {
-                                completion(nil)
-                            }
-                        })*/
                     }
                 }
             }
@@ -2459,6 +2454,23 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                     }
                 })
             }
+            
+            var lastTimestamp = 0.0
+            self.call.onMutedSpeechActivityDetected = { [weak self] value in
+                Queue.mainQueue().async {
+                    guard let self, value else {
+                        return
+                    }
+                    let timestamp = CFAbsoluteTimeGetCurrent()
+                    if lastTimestamp + 1000.0 < timestamp {
+                        lastTimestamp = timestamp
+                        
+                        self.presentUndoOverlay(content: .info(title: nil, text: self.presentationData.strings.VoiceChat_ToastMicrophoneIsMuted, timeout: nil, customUndoText: nil), action: { _ in
+                            return false
+                        })
+                    }
+                }
+            }
         }
         
         deinit {
@@ -2488,7 +2500,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
         private func openSettingsMenu(sourceNode: ASDisplayNode, gesture: ContextGesture?) {
             let items: Signal<[ContextMenuItem], NoError> = self.contextMenuMainItems()
             if let controller = self.controller {
-                let contextController = ContextController(presentationData: self.presentationData.withUpdated(theme: self.darkTheme), source: .reference(VoiceChatContextReferenceContentSource(controller: controller, sourceNode: self.optionsButton.referenceNode)), items: items |> map { ContextController.Items(content: .list($0)) }, gesture: gesture)
+                let contextController = ContextController(presentationData: self.presentationData.withUpdated(theme: self.darkTheme), source: .reference(VoiceChatContextReferenceContentSource(controller: controller, sourceView: self.optionsButton.referenceNode.view)), items: items |> map { ContextController.Items(content: .list($0)) }, gesture: gesture)
                 controller.presentInGlobalOverlay(contextController)
             }
         }
@@ -2517,7 +2529,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                                 guard let strongSelf = self else {
                                     return
                                 }
-                                c.setItems(strongSelf.contextMenuDisplayAsItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
+                                c?.setItems(strongSelf.contextMenuDisplayAsItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
                             })))
                             items.append(.separator)
                             break
@@ -2550,7 +2562,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                         guard let strongSelf = self else {
                             return
                         }
-                        c.setItems(strongSelf.contextMenuAudioItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
+                        c?.setItems(strongSelf.contextMenuAudioItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
                     })))
                 }
 
@@ -2587,7 +2599,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                             guard let strongSelf = self else {
                                 return
                             }
-                            c.setItems(strongSelf.contextMenuPermissionItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
+                            c?.setItems(strongSelf.contextMenuPermissionItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
                         })))
                     }
                 }
@@ -2616,14 +2628,23 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                 }
                 
                 if !isScheduled && canSpeak {
-                    items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.VoiceChat_NoiseSuppression, textColor: .primary, textLayout: .secondLineWithValue(strongSelf.isNoiseSuppressionEnabled ? strongSelf.presentationData.strings.VoiceChat_NoiseSuppressionEnabled : strongSelf.presentationData.strings.VoiceChat_NoiseSuppressionDisabled), icon: { theme in
-                        return generateTintedImage(image: UIImage(bundleImageName: "Call/Context Menu/Noise"), color: theme.actionSheet.primaryTextColor)
-                    }, action: { _, f in
-                        f(.dismissWithoutContent)
-                        if let strongSelf = self {
-                            strongSelf.call.setIsNoiseSuppressionEnabled(!strongSelf.isNoiseSuppressionEnabled)
-                        }
-                    })))
+                    if #available(iOS 15.0, *) {
+                        items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.VoiceChat_MicrophoneModes, textColor: .primary, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: "Call/Context Menu/Noise"), color: theme.actionSheet.primaryTextColor)
+                        }, action: { _, f in
+                            f(.dismissWithoutContent)
+                            AVCaptureDevice.showSystemUserInterface(.microphoneModes)
+                        })))
+                    } else {
+                        items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.VoiceChat_NoiseSuppression, textColor: .primary, textLayout: .secondLineWithValue(strongSelf.isNoiseSuppressionEnabled ? strongSelf.presentationData.strings.VoiceChat_NoiseSuppressionEnabled : strongSelf.presentationData.strings.VoiceChat_NoiseSuppressionDisabled), icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: "Call/Context Menu/Noise"), color: theme.actionSheet.primaryTextColor)
+                        }, action: { _, f in
+                            f(.dismissWithoutContent)
+                            if let strongSelf = self {
+                                strongSelf.call.setIsNoiseSuppressionEnabled(!strongSelf.isNoiseSuppressionEnabled)
+                            }
+                        })))
+                    }
                 }
                 
                 if let callState = strongSelf.callState, callState.isVideoEnabled && (callState.muteState?.canUnmute ?? true) {
@@ -2865,7 +2886,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                 guard let strongSelf = self else {
                     return
                 }
-                c.setItems(strongSelf.contextMenuMainItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
+                c?.setItems(strongSelf.contextMenuMainItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
             })))
             return .single(items)
         }
@@ -2960,7 +2981,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                     guard let strongSelf = self else {
                         return
                     }
-                    c.setItems(strongSelf.contextMenuMainItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
+                    c?.setItems(strongSelf.contextMenuMainItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
                 })))
                 return items
             }
@@ -3006,7 +3027,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                     guard let strongSelf = self else {
                         return
                     }
-                    c.setItems(strongSelf.contextMenuMainItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
+                    c?.setItems(strongSelf.contextMenuMainItems() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)
                 })))
             }
             return .single(items)
@@ -3908,7 +3929,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
             transition.updateAlpha(node: self.bottomGradientNode, alpha: self.isLandscape ? 0.0 : 1.0)
             
             var isTablet = false
-            let videoFrame: CGRect
+            var videoFrame: CGRect
             let videoContainerFrame: CGRect
             if case .regular = layout.metrics.widthClass {
                 isTablet = true
@@ -3922,6 +3943,11 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                 videoFrame = CGRect(x: 0.0, y: videoTopEdgeY, width: isLandscape ? max(0.0, layout.size.width - layout.safeInsets.right - 92.0) : layout.size.width, height: videoBottomEdgeY - videoTopEdgeY)
                 videoContainerFrame = CGRect(origin: CGPoint(), size: layout.size)
             }
+            
+            if videoFrame.width < 0.0 || videoFrame.height < 0.0 || !videoFrame.width.isNormal || !videoFrame.height.isNormal {
+                videoFrame = CGRect()
+            }
+            
             transition.updateFrame(node: self.mainStageContainerNode, frame: videoContainerFrame)
             transition.updateFrame(node: self.mainStageBackgroundNode, frame: videoFrame)
             if !self.mainStageNode.animating {
@@ -5489,7 +5515,7 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
 
                     let input = (self.call as! PresentationGroupCallImpl).video(endpointId: channel.endpointId)
                     if let input = input, let videoView = self.videoRenderingContext.makeView(input: input, blur: false) {
-                        let videoNode = GroupVideoNode(videoView: videoView, backdropVideoView: self.videoRenderingContext.makeView(input: input, blur: true))
+                        let videoNode = GroupVideoNode(videoView: videoView, backdropVideoView: self.videoRenderingContext.makeBlurView(input: input, mainView: videoView))
 
                         self.readyVideoDisposables.set((combineLatest(videoNode.ready, .single(false) |> then(.single(true) |> delay(10.0, queue: Queue.mainQueue())))
                         |> deliverOnMainQueue
@@ -5541,65 +5567,6 @@ public final class VoiceChatControllerImpl: ViewController, VoiceChatController 
                             self.updateMembers()
                         }
                     }
-
-                    /*self.call.makeIncomingVideoView(endpointId: channel.endpointId, requestClone: GroupVideoNode.useBlurTransparency, completion: { [weak self] videoView, backdropVideoView in
-                        Queue.mainQueue().async {
-                            guard let strongSelf = self, let videoView = videoView else {
-                                return
-                            }
-                            let videoNode = GroupVideoNode(videoView: videoView, backdropVideoView: backdropVideoView)
-                            
-                            strongSelf.readyVideoDisposables.set((combineLatest(videoNode.ready, .single(false) |> then(.single(true) |> delay(10.0, queue: Queue.mainQueue())))
-                            |> deliverOnMainQueue
-                            ).start(next: { [weak self, weak videoNode] ready, timeouted in
-                                if let strongSelf = self, let videoNode = videoNode {
-                                    Queue.mainQueue().after(0.1) {
-                                        if timeouted && !ready {
-                                            strongSelf.timeoutedEndpointIds.insert(channel.endpointId)
-                                            strongSelf.readyVideoEndpointIds.remove(channel.endpointId)
-                                            strongSelf.readyVideoEndpointIdsPromise.set(strongSelf.readyVideoEndpointIds)
-                                            strongSelf.wideVideoNodes.remove(channel.endpointId)
-                                            
-                                            strongSelf.updateMembers()
-                                        } else if ready {
-                                            strongSelf.readyVideoEndpointIds.insert(channel.endpointId)
-                                            strongSelf.readyVideoEndpointIdsPromise.set(strongSelf.readyVideoEndpointIds)
-                                            strongSelf.timeoutedEndpointIds.remove(channel.endpointId)
-                                            if videoNode.aspectRatio <= 0.77 {
-                                                strongSelf.wideVideoNodes.insert(channel.endpointId)
-                                            } else {
-                                                strongSelf.wideVideoNodes.remove(channel.endpointId)
-                                            }
-                                            strongSelf.updateMembers()
-
-                                            if let (layout, _) = strongSelf.validLayout, case .compact = layout.metrics.widthClass {
-                                                if let interaction = strongSelf.itemInteraction {
-                                                    loop: for i in 0 ..< strongSelf.currentFullscreenEntries.count {
-                                                        let entry = strongSelf.currentFullscreenEntries[i]
-                                                        switch entry {
-                                                        case let .peer(peerEntry, _):
-                                                            if peerEntry.effectiveVideoEndpointId == channel.endpointId {
-                                                                let presentationData = strongSelf.presentationData.withUpdated(theme: strongSelf.darkTheme)
-                                                                strongSelf.fullscreenListNode.transaction(deleteIndices: [], insertIndicesAndItems: [], updateIndicesAndItems: [ListViewUpdateItem(index: i, previousIndex: i, item: entry.fullscreenItem(context: strongSelf.context, presentationData: presentationData, interaction: interaction), directionHint: nil)], options: [.Synchronous], updateOpaqueState: nil)
-                                                                break loop
-                                                            }
-                                                        default:
-                                                            break
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }), forKey: channel.endpointId)
-                            strongSelf.videoNodes[channel.endpointId] = videoNode
-
-                            if let _ = strongSelf.validLayout {
-                                strongSelf.updateMembers()
-                            }
-                        }
-                    })*/
                 }
             }
 
@@ -7116,16 +7083,50 @@ private final class VoiceChatContextExtractedContentSource: ContextExtractedCont
     }
 }
 
-private final class VoiceChatContextReferenceContentSource: ContextReferenceContentSource {
+final class VoiceChatContextReferenceContentSource: ContextReferenceContentSource {
     private let controller: ViewController
-    private let sourceNode: ContextReferenceContentNode
+    private let sourceView: UIView
     
-    init(controller: ViewController, sourceNode: ContextReferenceContentNode) {
+    init(controller: ViewController, sourceView: UIView) {
         self.controller = controller
-        self.sourceNode = sourceNode
+        self.sourceView = sourceView
     }
     
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
-        return ContextControllerReferenceViewInfo(referenceView: self.sourceNode.view, contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: UIScreen.main.bounds)
+    }
+}
+
+public func shouldUseV2VideoChatImpl(context: AccountContext) -> Bool {
+    var useV2 = false
+    if let data = context.currentAppConfiguration.with({ $0 }).data, let _ = data["ios_killswitch_enable_videochatui_v2"] {
+        useV2 = true
+    }
+    if context.sharedContext.immediateExperimentalUISettings.disableCallV2 {
+        useV2 = false
+    }
+    if let data = context.currentAppConfiguration.with({ $0 }).data, let _ = data["ios_killswitch_disable_videochatui_v2"] {
+        useV2 = false
+    }
+    return useV2
+}
+
+public func makeVoiceChatControllerInitialData(sharedContext: SharedAccountContext, accountContext: AccountContext, call: PresentationGroupCall) -> Signal<Any, NoError> {
+    let useV2 = shouldUseV2VideoChatImpl(context: accountContext)
+    
+    if useV2 {
+        return VideoChatScreenV2Impl.initialData(call: call) |> map { $0 as Any }
+    } else {
+        return .single(Void())
+    }
+}
+
+public func makeVoiceChatController(sharedContext: SharedAccountContext, accountContext: AccountContext, call: PresentationGroupCall, initialData: Any) -> VoiceChatController {
+    let useV2 = shouldUseV2VideoChatImpl(context: accountContext)
+    
+    if useV2 {
+        return VideoChatScreenV2Impl(initialData: initialData as! VideoChatScreenV2Impl.InitialData, call: call)
+    } else {
+        return VoiceChatControllerImpl(sharedContext: sharedContext, accountContext: accountContext, call: call)
     }
 }

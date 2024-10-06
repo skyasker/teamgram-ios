@@ -57,7 +57,7 @@ final class NetworkBroadcastPartSource: BroadcastPartSource {
     private var dataSource: AudioBroadcastDataSource?
     
     #if DEBUG
-    private let debugDumpDirectory: EngineTempBox.Directory?
+    private var debugDumpDirectory: EngineTempBox.Directory?
     #endif
     
     init(queue: Queue, engine: TelegramEngine, callId: Int64, accessHash: Int64, isExternalStream: Bool) {
@@ -67,8 +67,8 @@ final class NetworkBroadcastPartSource: BroadcastPartSource {
         self.accessHash = accessHash
         self.isExternalStream = isExternalStream
         
-        #if DEBUG && true
-        self.debugDumpDirectory = EngineTempBox.shared.tempDirectory()
+        #if DEBUG
+        //self.debugDumpDirectory = EngineTempBox.shared.tempDirectory()
         #endif
     }
 
@@ -463,7 +463,7 @@ public final class OngoingGroupCallContext {
         
         private let audioSessionActiveDisposable = MetaDisposable()
         
-        init(queue: Queue, inputDeviceId: String, outputDeviceId: String, audioSessionActive: Signal<Bool, NoError>, video: OngoingCallVideoCapturer?, requestMediaChannelDescriptions: @escaping (Set<UInt32>, @escaping ([MediaChannelDescription]) -> Void) -> Disposable, rejoinNeeded: @escaping () -> Void, outgoingAudioBitrateKbit: Int32?, videoContentType: VideoContentType, enableNoiseSuppression: Bool, disableAudioInput: Bool, preferX264: Bool, logPath: String) {
+        init(queue: Queue, inputDeviceId: String, outputDeviceId: String, audioSessionActive: Signal<Bool, NoError>, video: OngoingCallVideoCapturer?, requestMediaChannelDescriptions: @escaping (Set<UInt32>, @escaping ([MediaChannelDescription]) -> Void) -> Disposable, rejoinNeeded: @escaping () -> Void, outgoingAudioBitrateKbit: Int32?, videoContentType: VideoContentType, enableNoiseSuppression: Bool, disableAudioInput: Bool, enableSystemMute: Bool, preferX264: Bool, logPath: String, onMutedSpeechActivityDetected: @escaping (Bool) -> Void) {
             self.queue = queue
             
 #if os(iOS)
@@ -574,8 +574,12 @@ public final class OngoingGroupCallContext {
                 videoContentType: _videoContentType,
                 enableNoiseSuppression: enableNoiseSuppression,
                 disableAudioInput: disableAudioInput,
+                enableSystemMute: enableSystemMute,
                 preferX264: preferX264,
                 logPath: logPath,
+                onMutedSpeechActivityDetected: { value in
+                    onMutedSpeechActivityDetected(value)
+                },
                 audioDevice: audioDevice
             )
 #else
@@ -1109,10 +1113,10 @@ public final class OngoingGroupCallContext {
         }
     }
     
-    public init(inputDeviceId: String = "", outputDeviceId: String = "", audioSessionActive: Signal<Bool, NoError>, video: OngoingCallVideoCapturer?, requestMediaChannelDescriptions: @escaping (Set<UInt32>, @escaping ([MediaChannelDescription]) -> Void) -> Disposable, rejoinNeeded: @escaping () -> Void, outgoingAudioBitrateKbit: Int32?, videoContentType: VideoContentType, enableNoiseSuppression: Bool, disableAudioInput: Bool, preferX264: Bool, logPath: String) {
+    public init(inputDeviceId: String = "", outputDeviceId: String = "", audioSessionActive: Signal<Bool, NoError>, video: OngoingCallVideoCapturer?, requestMediaChannelDescriptions: @escaping (Set<UInt32>, @escaping ([MediaChannelDescription]) -> Void) -> Disposable, rejoinNeeded: @escaping () -> Void, outgoingAudioBitrateKbit: Int32?, videoContentType: VideoContentType, enableNoiseSuppression: Bool, disableAudioInput: Bool, enableSystemMute: Bool, preferX264: Bool, logPath: String, onMutedSpeechActivityDetected: @escaping (Bool) -> Void) {
         let queue = self.queue
         self.impl = QueueLocalObject(queue: queue, generate: {
-            return Impl(queue: queue, inputDeviceId: inputDeviceId, outputDeviceId: outputDeviceId, audioSessionActive: audioSessionActive, video: video, requestMediaChannelDescriptions: requestMediaChannelDescriptions, rejoinNeeded: rejoinNeeded, outgoingAudioBitrateKbit: outgoingAudioBitrateKbit, videoContentType: videoContentType, enableNoiseSuppression: enableNoiseSuppression, disableAudioInput: disableAudioInput, preferX264: preferX264, logPath: logPath)
+            return Impl(queue: queue, inputDeviceId: inputDeviceId, outputDeviceId: outputDeviceId, audioSessionActive: audioSessionActive, video: video, requestMediaChannelDescriptions: requestMediaChannelDescriptions, rejoinNeeded: rejoinNeeded, outgoingAudioBitrateKbit: outgoingAudioBitrateKbit, videoContentType: videoContentType, enableNoiseSuppression: enableNoiseSuppression, disableAudioInput: disableAudioInput, enableSystemMute: enableSystemMute, preferX264: preferX264, logPath: logPath, onMutedSpeechActivityDetected: onMutedSpeechActivityDetected)
         })
     }
     

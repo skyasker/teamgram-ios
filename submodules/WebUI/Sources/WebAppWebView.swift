@@ -92,6 +92,18 @@ function disconnectObserver() {
 final class WebAppWebView: WKWebView {
     var handleScriptMessage: (WKScriptMessage) -> Void = { _ in }
     
+    var customBottomInset: CGFloat = 0.0 {
+        didSet {
+            if self.customBottomInset != oldValue {
+                self.setNeedsLayout()
+            }
+        }
+    }
+    
+    override var safeAreaInsets: UIEdgeInsets {
+        return UIEdgeInsets(top: 0.0, left: 0.0, bottom: self.customBottomInset, right: 0.0)
+    }
+    
     init(account: Account) {
         let configuration = WKWebViewConfiguration()
                 
@@ -175,6 +187,10 @@ final class WebAppWebView: WKWebView {
         fatalError("init(coder:) has not been implemented")
     }
     
+    deinit {
+        print()
+    }
+    
     override func didMoveToSuperview() {
         super.didMoveToSuperview()
         
@@ -191,6 +207,22 @@ final class WebAppWebView: WKWebView {
             NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
             NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillShowNotification, object: nil)
             NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillHideNotification, object: nil)
+        }
+    }
+    
+    func hideScrollIndicators() {
+        var hiddenViews: [UIView] = []
+        for view in self.scrollView.subviews.reversed() {
+            let minSize = min(view.frame.width, view.frame.height)
+            if minSize < 4.0 {
+                view.isHidden = true
+                hiddenViews.append(view)
+            }
+        }
+        Queue.mainQueue().after(2.0) {
+            for view in hiddenViews {
+                view.isHidden = false
+            }
         }
     }
     

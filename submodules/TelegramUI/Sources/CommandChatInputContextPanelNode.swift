@@ -172,6 +172,8 @@ private struct CommandChatInputContextPanelEntry: Comparable, Identifiable {
                     },
                     openStories: { _, _ in
                     },
+                    openStarsTopup: { _ in
+                    },
                     dismissNotice: { _ in
                     },
                     editPeer: { _ in
@@ -275,7 +277,7 @@ final class CommandChatInputContextPanelNode: ChatInputContextPanelNode {
     private let listView: ListView
     private let listBackgroundView: UIView
     private var currentEntries: [CommandChatInputContextPanelEntry]?
-    private var contentOffsetChangeTransition: Transition?
+    private var contentOffsetChangeTransition: ComponentTransition?
     private var isAnimatingOut: Bool = false
     
     private var enqueuedTransitions: [(CommandChatInputContextPanelTransition, Bool)] = []
@@ -323,7 +325,7 @@ final class CommandChatInputContextPanelNode: ChatInputContextPanelNode {
                 }
             }
             
-            let transition: Transition = self.contentOffsetChangeTransition ?? .immediate
+            let transition: ComponentTransition = self.contentOffsetChangeTransition ?? .immediate
             transition.setFrame(view: self.listBackgroundView, frame: CGRect(origin: CGPoint(x: 0.0, y: topItemOffset), size: CGSize(width: self.listView.bounds.width, height: self.listView.bounds.height + 1000.0)))
         }
     }
@@ -503,7 +505,7 @@ final class CommandChatInputContextPanelNode: ChatInputContextPanelNode {
         let (duration, curve) = listViewAnimationDurationAndCurve(transition: transition)
         let updateSizeAndInsets = ListViewUpdateSizeAndInsets(size: size, insets: insets, duration: duration, curve: curve)
         
-        self.contentOffsetChangeTransition = Transition(transition)
+        self.contentOffsetChangeTransition = ComponentTransition(transition)
         
         self.listView.transaction(deleteIndices: [], insertIndicesAndItems: [], updateIndicesAndItems: [], options: [.Synchronous, .LowLatency], scrollToItem: nil, updateSizeAndInsets: updateSizeAndInsets, stationaryItemRange: nil, updateOpaqueState: nil, completion: { _ in })
         

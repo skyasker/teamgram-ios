@@ -458,8 +458,8 @@ public extension TelegramEngine {
             }
         }
 
-        public func toggleShouldChannelMessagesSignatures(peerId: PeerId, enabled: Bool) -> Signal<Void, NoError> {
-            return _internal_toggleShouldChannelMessagesSignatures(account: self.account, peerId: peerId, enabled: enabled)
+        public func toggleShouldChannelMessagesSignatures(peerId: PeerId, signaturesEnabled: Bool, profilesEnabled: Bool) -> Signal<Void, NoError> {
+            return _internal_toggleShouldChannelMessagesSignatures(account: self.account, peerId: peerId, signaturesEnabled: signaturesEnabled, profilesEnabled: profilesEnabled)
         }
 
         public func toggleMessageCopyProtection(peerId: PeerId, enabled: Bool) -> Signal<Void, NoError> {
@@ -561,10 +561,10 @@ public extension TelegramEngine {
             return _internal_removePeerChat(account: self.account, peerId: peerId, reportChatSpam: reportChatSpam, deleteGloballyIfPossible: deleteGloballyIfPossible)
         }
 
-        public func removePeerChats(peerIds: [PeerId]) -> Signal<Never, NoError> {
+        public func removePeerChats(peerIds: [PeerId], deleteGloballyIfPossible: Bool = false) -> Signal<Never, NoError> {
             return self.account.postbox.transaction { transaction -> Void in
                 for peerId in peerIds {
-                    _internal_removePeerChat(account: self.account, transaction: transaction, mediaBox: self.account.postbox.mediaBox, peerId: peerId, reportChatSpam: false, deleteGloballyIfPossible: peerId.namespace == Namespaces.Peer.SecretChat)
+                    _internal_removePeerChat(account: self.account, transaction: transaction, mediaBox: self.account.postbox.mediaBox, peerId: peerId, reportChatSpam: false, deleteGloballyIfPossible: peerId.namespace == Namespaces.Peer.SecretChat || deleteGloballyIfPossible)
                 }
             }
             |> ignoreValues
@@ -600,6 +600,14 @@ public extension TelegramEngine {
         public func managedUpdatedRecentPeers() -> Signal<Void, NoError> {
             return _internal_managedUpdatedRecentPeers(accountPeerId: self.account.peerId, postbox: self.account.postbox, network: self.account.network)
         }
+        
+        public func recentApps() -> Signal<[EnginePeer.Id], NoError> {
+            return _internal_recentApps(accountPeerId: self.account.peerId, postbox: self.account.postbox)
+        }
+        
+        public func managedUpdatedRecentApps() -> Signal<Void, NoError> {
+            return _internal_managedUpdatedRecentApps(accountPeerId: self.account.peerId, postbox: self.account.postbox, network: self.account.network)
+        }
 
         public func removeRecentPeer(peerId: PeerId) -> Signal<Void, NoError> {
             return _internal_removeRecentPeer(account: self.account, peerId: peerId)
@@ -624,6 +632,10 @@ public extension TelegramEngine {
 
         public func removeRecentlyUsedInlineBot(peerId: PeerId) -> Signal<Void, NoError> {
             return _internal_removeRecentlyUsedInlineBot(account: self.account, peerId: peerId)
+        }
+        
+        public func removeRecentlyUsedApp(peerId: PeerId) -> Signal<Void, NoError> {
+            return _internal_removeRecentlyUsedApp(account: self.account, peerId: peerId)
         }
 
         public func uploadedPeerPhoto(resource: MediaResource) -> Signal<UploadedPeerPhotoData, NoError> {
@@ -693,8 +705,8 @@ public extension TelegramEngine {
             return _internal_checkPeerChatServiceActions(postbox: self.account.postbox, peerId: peerId)
         }
 
-        public func createPeerExportedInvitation(peerId: PeerId, title: String?, expireDate: Int32?, usageLimit: Int32?, requestNeeded: Bool?) -> Signal<ExportedInvitation?, CreatePeerExportedInvitationError> {
-            return _internal_createPeerExportedInvitation(account: self.account, peerId: peerId, title: title, expireDate: expireDate, usageLimit: usageLimit, requestNeeded: requestNeeded)
+        public func createPeerExportedInvitation(peerId: PeerId, title: String?, expireDate: Int32?, usageLimit: Int32?, requestNeeded: Bool?, subscriptionPricing: StarsSubscriptionPricing?) -> Signal<ExportedInvitation?, CreatePeerExportedInvitationError> {
+            return _internal_createPeerExportedInvitation(account: self.account, peerId: peerId, title: title, expireDate: expireDate, usageLimit: usageLimit, requestNeeded: requestNeeded, subscriptionPricing: subscriptionPricing)
         }
 
         public func editPeerExportedInvitation(peerId: PeerId, link: String, title: String?, expireDate: Int32?, usageLimit: Int32?, requestNeeded: Bool?) -> Signal<ExportedInvitation?, EditPeerExportedInvitationError> {
@@ -821,6 +833,18 @@ public extension TelegramEngine {
         
         public func requestChannelRevenueWithdrawalUrl(peerId: EnginePeer.Id, password: String) -> Signal<String, RequestRevenueWithdrawalError> {
             return _internal_requestChannelRevenueWithdrawalUrl(account: self.account, peerId: peerId, password: password)
+        }
+        
+        public func checkStarsRevenueWithdrawalAvailability() -> Signal<Never, RequestStarsRevenueWithdrawalError> {
+            return _internal_checkStarsRevenueWithdrawalAvailability(account: self.account)
+        }
+        
+        public func requestStarsRevenueWithdrawalUrl(peerId: EnginePeer.Id, amount: Int64, password: String) -> Signal<String, RequestStarsRevenueWithdrawalError> {
+            return _internal_requestStarsRevenueWithdrawalUrl(account: self.account, peerId: peerId, amount: amount, password: password)
+        }
+        
+        public func requestStarsRevenueAdsAccountlUrl(peerId: EnginePeer.Id) -> Signal<String?, NoError> {
+            return _internal_requestStarsRevenueAdsAccountlUrl(account: self.account, peerId: peerId)
         }
         
         public func getChatListPeers(filterPredicate: ChatListFilterPredicate) -> Signal<[EnginePeer], NoError> {
@@ -1411,8 +1435,16 @@ public extension TelegramEngine {
             return _internal_requestRecommendedChannels(account: self.account, peerId: peerId, forceUpdate: forceUpdate)
         }
         
+        public func recommendedAppPeerIds() -> Signal<[EnginePeer.Id]?, NoError> {
+            return _internal_recommendedAppPeerIds(account: self.account)
+        }
+        
         public func requestGlobalRecommendedChannelsIfNeeded() -> Signal<Never, NoError> {
             return _internal_requestRecommendedChannels(account: self.account, peerId: nil, forceUpdate: false)
+        }
+        
+        public func requestRecommendedAppsIfNeeded() -> Signal<Never, NoError> {
+            return _internal_requestRecommendedApps(account: self.account, forceUpdate: false)
         }
         
         public func isPremiumRequiredToContact(_ peerIds: [EnginePeer.Id]) -> Signal<[EnginePeer.Id], NoError> {
@@ -1475,7 +1507,7 @@ public extension TelegramEngine {
                     return .single(false)
                 }
                 
-                return self.account.postbox.aroundMessageHistoryViewForLocation(.peer(peerId: id, threadId: nil), anchor: .upperBound, ignoreMessagesInTimestampRange: nil, count: 44, fixedCombinedReadStates: nil, topTaggedMessageIdNamespaces: Set(), tag: nil, appendMessagesFromTheSameGroup: false, namespaces: .not(Namespaces.Message.allNonRegular), orderStatistics: [])
+                return self.account.postbox.aroundMessageHistoryViewForLocation(.peer(peerId: id, threadId: nil), anchor: .upperBound, ignoreMessagesInTimestampRange: nil, ignoreMessageIds: Set(), count: 44, fixedCombinedReadStates: nil, topTaggedMessageIdNamespaces: Set(), tag: nil, appendMessagesFromTheSameGroup: false, namespaces: .not(Namespaces.Message.allNonRegular), orderStatistics: [])
                 |> map { view -> Bool in
                     for entry in view.0.entries {
                         if entry.message.flags.contains(.Incoming) {
@@ -1589,6 +1621,12 @@ public extension TelegramEngine {
                     }
                 }
             }
+        }
+        
+        public func setStarsReactionDefaultToPrivate(isPrivate: Bool) {
+            let _ = self.account.postbox.transaction({ transaction in
+                _internal_setStarsReactionDefaultToPrivate(isPrivate: isPrivate, transaction: transaction)
+            }).startStandalone()
         }
     }
 }

@@ -36,6 +36,7 @@ public enum ContextMenuActionItemTextLayout {
     case singleLine
     case twoLinesMax
     case secondLineWithValue(String)
+    case secondLineWithAttributedValue(NSAttributedString)
     case multiline
 }
 
@@ -101,11 +102,11 @@ public struct ContextMenuActionBadge: Equatable {
 
 public final class ContextMenuActionItem {
     public final class Action {
-        public let controller: ContextControllerProtocol
+        public let controller: ContextControllerProtocol?
         public let dismissWithResult: (ContextMenuActionResult) -> Void
         public let updateAction: (AnyHashable, ContextMenuActionItem) -> Void
 
-        init(controller: ContextControllerProtocol, dismissWithResult: @escaping (ContextMenuActionResult) -> Void, updateAction: @escaping (AnyHashable, ContextMenuActionItem) -> Void) {
+        init(controller: ContextControllerProtocol?, dismissWithResult: @escaping (ContextMenuActionResult) -> Void, updateAction: @escaping (AnyHashable, ContextMenuActionItem) -> Void) {
             self.controller = controller
             self.dismissWithResult = dismissWithResult
             self.updateAction = updateAction
@@ -155,7 +156,7 @@ public final class ContextMenuActionItem {
         iconAnimation: IconAnimation? = nil,
         textIcon: @escaping (PresentationTheme) -> UIImage? = { _ in return nil },
         textLinkAction: @escaping () -> Void = {},
-        action: ((ContextControllerProtocol, @escaping (ContextMenuActionResult) -> Void) -> Void)?
+        action: ((ContextControllerProtocol?, @escaping (ContextMenuActionResult) -> Void) -> Void)?
     ) {
         self.init(
             id: id,
@@ -1328,9 +1329,9 @@ final class ContextControllerNode: ViewControllerTracingNode, ASScrollViewDelega
         }
     }
     
-    func animateOutToReaction(value: MessageReaction.Reaction, targetView: UIView, hideNode: Bool, animateTargetContainer: UIView?, addStandaloneReactionAnimation: ((StandaloneReactionAnimation) -> Void)?, reducedCurve: Bool, completion: @escaping () -> Void) {
+    func animateOutToReaction(value: MessageReaction.Reaction, targetView: UIView, hideNode: Bool, animateTargetContainer: UIView?, addStandaloneReactionAnimation: ((StandaloneReactionAnimation) -> Void)?, reducedCurve: Bool, onHit: (() -> Void)?, completion: @escaping () -> Void) {
         if let sourceContainer = self.sourceContainer {
-            sourceContainer.animateOutToReaction(value: value, targetView: targetView, hideNode: hideNode, animateTargetContainer: animateTargetContainer, addStandaloneReactionAnimation: addStandaloneReactionAnimation, reducedCurve: reducedCurve, completion: completion)
+            sourceContainer.animateOutToReaction(value: value, targetView: targetView, hideNode: hideNode, animateTargetContainer: animateTargetContainer, addStandaloneReactionAnimation: addStandaloneReactionAnimation, reducedCurve: reducedCurve, onHit: onHit, completion: completion)
         }
     }
 
@@ -2150,6 +2151,7 @@ public protocol ContextExtractedContentSource: AnyObject {
     var initialAppearanceOffset: CGPoint { get }
     var centerVertically: Bool { get }
     var keepInPlace: Bool { get }
+    var adjustContentHorizontally: Bool { get }
     var adjustContentForSideInset: Bool { get }
     var ignoreContentTouches: Bool { get }
     var blurBackground: Bool { get }
@@ -2167,6 +2169,10 @@ public extension ContextExtractedContentSource {
     }
     
     var centerVertically: Bool {
+        return false
+    }
+    
+    var adjustContentHorizontally: Bool {
         return false
     }
     
@@ -2271,6 +2277,7 @@ public final class ContextController: ViewController, StandalonePresentableContr
         public var allPresetReactionsAreAvailable: Bool
         public var getEmojiContent: ((AnimationCache, MultiAnimationRenderer) -> Signal<EmojiPagerContentComponent, NoError>)?
         public var disablePositionLock: Bool
+        public var previewReaction: TelegramMediaFile?
         public var tip: Tip?
         public var tipSignal: Signal<Tip?, NoError>?
         public var dismissed: (() -> Void)?
@@ -2288,6 +2295,7 @@ public final class ContextController: ViewController, StandalonePresentableContr
             allPresetReactionsAreAvailable: Bool = false,
             getEmojiContent: ((AnimationCache, MultiAnimationRenderer) -> Signal<EmojiPagerContentComponent, NoError>)? = nil,
             disablePositionLock: Bool = false,
+            previewReaction: TelegramMediaFile? = nil,
             tip: Tip? = nil,
             tipSignal: Signal<Tip?, NoError>? = nil,
             dismissed: (() -> Void)? = nil
@@ -2304,6 +2312,7 @@ public final class ContextController: ViewController, StandalonePresentableContr
             self.allPresetReactionsAreAvailable = allPresetReactionsAreAvailable
             self.getEmojiContent = getEmojiContent
             self.disablePositionLock = disablePositionLock
+            self.previewReaction = previewReaction
             self.tip = tip
             self.tipSignal = tipSignal
             self.dismissed = dismissed
@@ -2321,6 +2330,7 @@ public final class ContextController: ViewController, StandalonePresentableContr
             self.allPresetReactionsAreAvailable = false
             self.getEmojiContent = nil
             self.disablePositionLock = false
+            self.previewReaction = nil
             self.tip = nil
             self.tipSignal = nil
             self.dismissed = nil
@@ -2339,6 +2349,7 @@ public final class ContextController: ViewController, StandalonePresentableContr
         case messageCopyProtection(isChannel: Bool)
         case animatedEmoji(text: String?, arguments: TextNodeWithEntities.Arguments?, file: TelegramMediaFile?, action: (() -> Void)?)
         case notificationTopicExceptions(text: String, action: (() -> Void)?)
+        case starsReactions(topCount: Int)
         
         public static func ==(lhs: Tip, rhs: Tip) -> Bool {
             switch lhs {
@@ -2380,6 +2391,12 @@ public final class ContextController: ViewController, StandalonePresentableContr
                 }
             case let .notificationTopicExceptions(text, _):
                 if case .notificationTopicExceptions(text, _) = rhs {
+                    return true
+                } else {
+                    return false
+                }
+            case let .starsReactions(topCount):
+                if case .starsReactions(topCount) = rhs {
                     return true
                 } else {
                     return false
@@ -2587,7 +2604,7 @@ public final class ContextController: ViewController, StandalonePresentableContr
             } else if let args = self.dismissToReactionOnInputClose {
                 self.dismissToReactionOnInputClose = nil
                 DispatchQueue.main.async {
-                    self.dismissWithReactionImpl(value: args.value, targetView: args.targetView, hideNode: args.hideNode, animateTargetContainer: args.animateTargetContainer, addStandaloneReactionAnimation: args.addStandaloneReactionAnimation, reducedCurve: true, completion: args.completion)
+                    self.dismissWithReactionImpl(value: args.value, targetView: args.targetView, hideNode: args.hideNode, animateTargetContainer: args.animateTargetContainer, addStandaloneReactionAnimation: args.addStandaloneReactionAnimation, reducedCurve: true, onHit: nil, completion: args.completion)
                 }
             }
         }
@@ -2689,11 +2706,11 @@ public final class ContextController: ViewController, StandalonePresentableContr
         self.dismissed?()
     }
     
-    public func dismissWithReaction(value: MessageReaction.Reaction, targetView: UIView, hideNode: Bool, animateTargetContainer: UIView?, addStandaloneReactionAnimation: ((StandaloneReactionAnimation) -> Void)?, completion: (() -> Void)?) {
-        self.dismissWithReactionImpl(value: value, targetView: targetView, hideNode: hideNode, animateTargetContainer: animateTargetContainer, addStandaloneReactionAnimation: addStandaloneReactionAnimation, reducedCurve: false, completion: completion)
+    public func dismissWithReaction(value: MessageReaction.Reaction, targetView: UIView, hideNode: Bool, animateTargetContainer: UIView?, addStandaloneReactionAnimation: ((StandaloneReactionAnimation) -> Void)?, onHit: (() -> Void)?, completion: (() -> Void)?) {
+        self.dismissWithReactionImpl(value: value, targetView: targetView, hideNode: hideNode, animateTargetContainer: animateTargetContainer, addStandaloneReactionAnimation: addStandaloneReactionAnimation, reducedCurve: false, onHit: onHit, completion: completion)
     }
     
-    private func dismissWithReactionImpl(value: MessageReaction.Reaction, targetView: UIView, hideNode: Bool, animateTargetContainer: UIView?, addStandaloneReactionAnimation: ((StandaloneReactionAnimation) -> Void)?, reducedCurve: Bool, completion: (() -> Void)?) {
+    private func dismissWithReactionImpl(value: MessageReaction.Reaction, targetView: UIView, hideNode: Bool, animateTargetContainer: UIView?, addStandaloneReactionAnimation: ((StandaloneReactionAnimation) -> Void)?, reducedCurve: Bool, onHit: (() -> Void)?, completion: (() -> Void)?) {
         if viewTreeContainsFirstResponder(view: self.view) {
             self.dismissToReactionOnInputClose = (value, targetView, hideNode, animateTargetContainer, addStandaloneReactionAnimation, completion)
             self.view.endEditing(true)
@@ -2702,7 +2719,7 @@ public final class ContextController: ViewController, StandalonePresentableContr
         
         if !self.wasDismissed {
             self.wasDismissed = true
-            self.controllerNode.animateOutToReaction(value: value, targetView: targetView, hideNode: hideNode, animateTargetContainer: animateTargetContainer, addStandaloneReactionAnimation: addStandaloneReactionAnimation, reducedCurve: reducedCurve, completion: { [weak self] in
+            self.controllerNode.animateOutToReaction(value: value, targetView: targetView, hideNode: hideNode, animateTargetContainer: animateTargetContainer, addStandaloneReactionAnimation: addStandaloneReactionAnimation, reducedCurve: reducedCurve, onHit: onHit, completion: { [weak self] in
                 self?.presentingViewController?.dismiss(animated: false, completion: nil)
                 completion?()
             })

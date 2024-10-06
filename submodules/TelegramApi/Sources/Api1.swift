@@ -35,42 +35,6 @@ public extension Api {
     }
 }
 public extension Api {
-    enum AppWebViewResult: TypeConstructorDescription {
-        case appWebViewResultUrl(url: String)
-    
-    public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-    switch self {
-                case .appWebViewResultUrl(let url):
-                    if boxed {
-                        buffer.appendInt32(1008422669)
-                    }
-                    serializeString(url, buffer: buffer, boxed: false)
-                    break
-    }
-    }
-    
-    public func descriptionFields() -> (String, [(String, Any)]) {
-        switch self {
-                case .appWebViewResultUrl(let url):
-                return ("appWebViewResultUrl", [("url", url as Any)])
-    }
-    }
-    
-        public static func parse_appWebViewResultUrl(_ reader: BufferReader) -> AppWebViewResult? {
-            var _1: String?
-            _1 = parseString(reader)
-            let _c1 = _1 != nil
-            if _c1 {
-                return Api.AppWebViewResult.appWebViewResultUrl(url: _1!)
-            }
-            else {
-                return nil
-            }
-        }
-    
-    }
-}
-public extension Api {
     enum AttachMenuBot: TypeConstructorDescription {
         case attachMenuBot(flags: Int32, botId: Int64, shortName: String, peerTypes: [Api.AttachMenuPeerType]?, icons: [Api.AttachMenuBotIcon])
     
@@ -651,6 +615,62 @@ public extension Api {
     }
 }
 public extension Api {
+    enum AvailableEffect: TypeConstructorDescription {
+        case availableEffect(flags: Int32, id: Int64, emoticon: String, staticIconId: Int64?, effectStickerId: Int64, effectAnimationId: Int64?)
+    
+    public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+    switch self {
+                case .availableEffect(let flags, let id, let emoticon, let staticIconId, let effectStickerId, let effectAnimationId):
+                    if boxed {
+                        buffer.appendInt32(-1815879042)
+                    }
+                    serializeInt32(flags, buffer: buffer, boxed: false)
+                    serializeInt64(id, buffer: buffer, boxed: false)
+                    serializeString(emoticon, buffer: buffer, boxed: false)
+                    if Int(flags) & Int(1 << 0) != 0 {serializeInt64(staticIconId!, buffer: buffer, boxed: false)}
+                    serializeInt64(effectStickerId, buffer: buffer, boxed: false)
+                    if Int(flags) & Int(1 << 1) != 0 {serializeInt64(effectAnimationId!, buffer: buffer, boxed: false)}
+                    break
+    }
+    }
+    
+    public func descriptionFields() -> (String, [(String, Any)]) {
+        switch self {
+                case .availableEffect(let flags, let id, let emoticon, let staticIconId, let effectStickerId, let effectAnimationId):
+                return ("availableEffect", [("flags", flags as Any), ("id", id as Any), ("emoticon", emoticon as Any), ("staticIconId", staticIconId as Any), ("effectStickerId", effectStickerId as Any), ("effectAnimationId", effectAnimationId as Any)])
+    }
+    }
+    
+        public static func parse_availableEffect(_ reader: BufferReader) -> AvailableEffect? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            var _2: Int64?
+            _2 = reader.readInt64()
+            var _3: String?
+            _3 = parseString(reader)
+            var _4: Int64?
+            if Int(_1!) & Int(1 << 0) != 0 {_4 = reader.readInt64() }
+            var _5: Int64?
+            _5 = reader.readInt64()
+            var _6: Int64?
+            if Int(_1!) & Int(1 << 1) != 0 {_6 = reader.readInt64() }
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            let _c3 = _3 != nil
+            let _c4 = (Int(_1!) & Int(1 << 0) == 0) || _4 != nil
+            let _c5 = _5 != nil
+            let _c6 = (Int(_1!) & Int(1 << 1) == 0) || _6 != nil
+            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 {
+                return Api.AvailableEffect.availableEffect(flags: _1!, id: _2!, emoticon: _3!, staticIconId: _4, effectStickerId: _5!, effectAnimationId: _6)
+            }
+            else {
+                return nil
+            }
+        }
+    
+    }
+}
+public extension Api {
     enum AvailableReaction: TypeConstructorDescription {
         case availableReaction(flags: Int32, reaction: String, title: String, staticIcon: Api.Document, appearAnimation: Api.Document, selectAnimation: Api.Document, activateAnimation: Api.Document, effectAnimation: Api.Document, aroundAnimation: Api.Document?, centerIcon: Api.Document?)
     
@@ -942,13 +962,13 @@ public extension Api {
 }
 public extension Api {
     enum Boost: TypeConstructorDescription {
-        case boost(flags: Int32, id: String, userId: Int64?, giveawayMsgId: Int32?, date: Int32, expires: Int32, usedGiftSlug: String?, multiplier: Int32?)
+        case boost(flags: Int32, id: String, userId: Int64?, giveawayMsgId: Int32?, date: Int32, expires: Int32, usedGiftSlug: String?, multiplier: Int32?, stars: Int64?)
     
     public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
     switch self {
-                case .boost(let flags, let id, let userId, let giveawayMsgId, let date, let expires, let usedGiftSlug, let multiplier):
+                case .boost(let flags, let id, let userId, let giveawayMsgId, let date, let expires, let usedGiftSlug, let multiplier, let stars):
                     if boxed {
-                        buffer.appendInt32(706514033)
+                        buffer.appendInt32(1262359766)
                     }
                     serializeInt32(flags, buffer: buffer, boxed: false)
                     serializeString(id, buffer: buffer, boxed: false)
@@ -958,14 +978,15 @@ public extension Api {
                     serializeInt32(expires, buffer: buffer, boxed: false)
                     if Int(flags) & Int(1 << 4) != 0 {serializeString(usedGiftSlug!, buffer: buffer, boxed: false)}
                     if Int(flags) & Int(1 << 5) != 0 {serializeInt32(multiplier!, buffer: buffer, boxed: false)}
+                    if Int(flags) & Int(1 << 6) != 0 {serializeInt64(stars!, buffer: buffer, boxed: false)}
                     break
     }
     }
     
     public func descriptionFields() -> (String, [(String, Any)]) {
         switch self {
-                case .boost(let flags, let id, let userId, let giveawayMsgId, let date, let expires, let usedGiftSlug, let multiplier):
-                return ("boost", [("flags", flags as Any), ("id", id as Any), ("userId", userId as Any), ("giveawayMsgId", giveawayMsgId as Any), ("date", date as Any), ("expires", expires as Any), ("usedGiftSlug", usedGiftSlug as Any), ("multiplier", multiplier as Any)])
+                case .boost(let flags, let id, let userId, let giveawayMsgId, let date, let expires, let usedGiftSlug, let multiplier, let stars):
+                return ("boost", [("flags", flags as Any), ("id", id as Any), ("userId", userId as Any), ("giveawayMsgId", giveawayMsgId as Any), ("date", date as Any), ("expires", expires as Any), ("usedGiftSlug", usedGiftSlug as Any), ("multiplier", multiplier as Any), ("stars", stars as Any)])
     }
     }
     
@@ -986,6 +1007,8 @@ public extension Api {
             if Int(_1!) & Int(1 << 4) != 0 {_7 = parseString(reader) }
             var _8: Int32?
             if Int(_1!) & Int(1 << 5) != 0 {_8 = reader.readInt32() }
+            var _9: Int64?
+            if Int(_1!) & Int(1 << 6) != 0 {_9 = reader.readInt64() }
             let _c1 = _1 != nil
             let _c2 = _2 != nil
             let _c3 = (Int(_1!) & Int(1 << 0) == 0) || _3 != nil
@@ -994,8 +1017,9 @@ public extension Api {
             let _c6 = _6 != nil
             let _c7 = (Int(_1!) & Int(1 << 4) == 0) || _7 != nil
             let _c8 = (Int(_1!) & Int(1 << 5) == 0) || _8 != nil
-            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 {
-                return Api.Boost.boost(flags: _1!, id: _2!, userId: _3, giveawayMsgId: _4, date: _5!, expires: _6!, usedGiftSlug: _7, multiplier: _8)
+            let _c9 = (Int(_1!) & Int(1 << 6) == 0) || _9 != nil
+            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 && _c9 {
+                return Api.Boost.boost(flags: _1!, id: _2!, userId: _3, giveawayMsgId: _4, date: _5!, expires: _6!, usedGiftSlug: _7, multiplier: _8, stars: _9)
             }
             else {
                 return nil

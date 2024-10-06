@@ -202,7 +202,7 @@ final class WatchSendMessageHandler: WatchRequestHandler {
                         messageSignal = .single((.message(text: args.text, attributes: [], inlineStickers: [:], mediaReference: nil, threadId: nil, replyToMessageId: replyMessageId.flatMap { EngineMessageReplySubject(messageId: $0, quote: nil) }, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: []), peerId))
                     } else if let args = subscription as? TGBridgeSendLocationMessageSubscription, let location = args.location {
                         let peerId = makePeerIdFromBridgeIdentifier(args.peerId)
-                        let map = TelegramMediaMap(latitude: location.latitude, longitude: location.longitude, heading: nil, accuracyRadius: nil, geoPlace: nil, venue: makeVenue(from: location.venue), liveBroadcastingTimeout: nil, liveProximityNotificationRadius: nil)
+                        let map = TelegramMediaMap(latitude: location.latitude, longitude: location.longitude, heading: nil, accuracyRadius: nil, venue: makeVenue(from: location.venue), liveBroadcastingTimeout: nil, liveProximityNotificationRadius: nil)
                         messageSignal = .single((.message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: map), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: []), peerId))
                     } else if let args = subscription as? TGBridgeSendStickerMessageSubscription {
                         let peerId = makePeerIdFromBridgeIdentifier(args.peerId)
@@ -720,7 +720,7 @@ final class WatchAudioHandler: WatchRequestHandler {
                         replyMessageId = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: replyToMid)
                     }
                     
-                    let _ = enqueueMessages(account: context.account, peerId: peerId, messages: [.message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: TelegramMediaFile(fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: randomId), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "audio/ogg", size: Int64(data.count), attributes: [.Audio(isVoice: true, duration: Int(duration), title: nil, performer: nil, waveform: nil)])), threadId: nil, replyToMessageId: replyMessageId.flatMap { EngineMessageReplySubject(messageId: $0, quote: nil) }, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])]).start()
+                    let _ = enqueueMessages(account: context.account, peerId: peerId, messages: [.message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: TelegramMediaFile(fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: randomId), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "audio/ogg", size: Int64(data.count), attributes: [.Audio(isVoice: true, duration: Int(duration), title: nil, performer: nil, waveform: nil)], alternativeRepresentations: [])), threadId: nil, replyToMessageId: replyMessageId.flatMap { EngineMessageReplySubject(messageId: $0, quote: nil) }, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])]).start()
                 }
             })
         } else {

@@ -21,6 +21,7 @@ import TextFormat
 import TelegramStringFormatting
 import UndoUI
 import InvisibleInkDustNode
+import PremiumStarComponent
 
 private final class PremiumGiftCodeSheetContent: CombinedComponent {
     typealias EnvironmentType = ViewControllerComponentContainer.Environment
@@ -265,7 +266,17 @@ private final class PremiumGiftCodeSheetContent: CombinedComponent {
             )
             
             let star = star.update(
-                component: PremiumStarComponent(isIntro: false, isVisible: true, hasIdleAnimations: true),
+                component: PremiumStarComponent(
+                    theme: theme,
+                    isIntro: false,
+                    isVisible: true,
+                    hasIdleAnimations: true,
+                    colors: [
+                        UIColor(rgb: 0x6a94ff),
+                        UIColor(rgb: 0x9472fd),
+                        UIColor(rgb: 0xe26bd3)
+                    ]
+                ),
                 availableSize: CGSize(width: context.availableSize.width, height: 200.0),
                 transition: .immediate
             )
@@ -603,6 +614,7 @@ private final class PremiumGiftCodeSheetComponent: CombinedComponent {
                     )),
                     backgroundColor: .color(environment.theme.actionSheet.opaqueItemBackgroundColor),
                     followContentSizeChanges: true,
+                    clipsContent: true,
                     animateOut: animateOut
                 ),
                 environment: {
@@ -1091,7 +1103,7 @@ private final class PeerCellComponent: Component {
             fatalError("init(coder:) has not been implemented")
         }
         
-        func update(component: PeerCellComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: PeerCellComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.component = component
             self.state = state
                                     
@@ -1137,7 +1149,7 @@ private final class PeerCellComponent: Component {
         return View(frame: CGRect())
     }
 
-    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }
@@ -1172,7 +1184,7 @@ private final class DustComponent: Component {
             fatalError("init(coder:) has not been implemented")
         }
         
-        func update(component: DustComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: DustComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.component = component
             self.state = state
                                     
@@ -1187,7 +1199,7 @@ private final class DustComponent: Component {
         return View(frame: CGRect())
     }
 
-    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }

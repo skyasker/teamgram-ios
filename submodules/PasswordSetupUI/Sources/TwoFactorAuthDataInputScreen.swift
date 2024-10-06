@@ -1104,7 +1104,7 @@ private final class TwoFactorDataInputTextNode: ASDisplayNode, UITextFieldDelega
             self.hideButtonNode.isHidden = confirmation
         case .email:
             self.inputNode.textField.keyboardType = .emailAddress
-            self.inputNode.textField.returnKeyType = .done
+            self.inputNode.textField.returnKeyType = .next
             self.hideButtonNode.isHidden = true
             
             if #available(iOS 12.0, *) {
@@ -1134,7 +1134,7 @@ private final class TwoFactorDataInputTextNode: ASDisplayNode, UITextFieldDelega
             }
         case .hint:
             self.inputNode.textField.keyboardType = .asciiCapable
-            self.inputNode.textField.returnKeyType = .done
+            self.inputNode.textField.returnKeyType = .next
             self.hideButtonNode.isHidden = true
             
             self.inputNode.textField.autocorrectionType = .no
@@ -1995,7 +1995,7 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
         let changeEmailActionButtonFrame: CGRect
         let resendCodeActionFrame: CGRect
         let resendCodeActionButtonFrame: CGRect
-        if changeEmailActionSize.width + resendCodeActionSize.width > layout.size.width - buttonFrame.minX * 2.0 {
+        if changeEmailActionSize.width + resendCodeActionSize.width > layout.size.width - buttonFrame.minX * 2.0 - 32.0 {
             changeEmailActionButtonFrame = CGRect(origin: CGPoint(x: buttonFrame.minX, y: buttonFrame.minY), size: CGSize(width: buttonFrame.width, height: buttonFrame.height))
             changeEmailActionFrame = CGRect(origin: CGPoint(x: changeEmailActionButtonFrame.minX + floor((changeEmailActionButtonFrame.width - changeEmailActionSize.width) / 2.0), y: changeEmailActionButtonFrame.minY + floor((changeEmailActionButtonFrame.height - changeEmailActionSize.height) / 2.0)), size: changeEmailActionSize)
             resendCodeActionButtonFrame = CGRect(origin: CGPoint(x: buttonFrame.minX, y: buttonFrame.maxY), size: CGSize(width: buttonFrame.width, height: buttonFrame.height))

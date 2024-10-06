@@ -68,13 +68,15 @@ public final class AnimatedTextComponent: Component {
             preconditionFailure()
         }
 
-        func update(component: AnimatedTextComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: AnimatedTextComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.component = component
             self.state = state
             
             var size = CGSize()
             
             let delayNorm: CGFloat = 0.002
+            
+            var firstDelayWidth: CGFloat?
             
             var validKeys: [CharacterKey] = []
             for item in component.items {
@@ -123,7 +125,7 @@ public final class AnimatedTextComponent: Component {
                             color: component.color
                         )),
                         environment: {},
-                        containerSize: CGSize(width: 100.0, height: 100.0)
+                        containerSize: CGSize(width: availableSize.width, height: 100.0)
                     )
                     let characterFrame = CGRect(origin: CGPoint(x: size.width, y: 0.0), size: characterSize)
                     if let characterComponentView = characterView.view {
@@ -138,20 +140,32 @@ public final class AnimatedTextComponent: Component {
                             if characterTransition.animation.isImmediate {
                                 characterComponentView.frame = characterFrame
                             } else {
+                                var delayWidth: Double = 0.0
+                                if let firstDelayWidth {
+                                    delayWidth = size.width - firstDelayWidth
+                                } else {
+                                    firstDelayWidth = size.width
+                                }
+                                
                                 characterComponentView.bounds = CGRect(origin: CGPoint(), size: characterFrame.size)
                                 let deltaPosition = CGPoint(x: characterFrame.midX - characterComponentView.frame.midX, y: characterFrame.midY - characterComponentView.frame.midY)
                                 characterComponentView.center = characterFrame.center
-                                characterComponentView.layer.animatePosition(from: CGPoint(x: -deltaPosition.x, y: -deltaPosition.y), to: CGPoint(), duration: 0.4, delay: delayNorm * size.width, timingFunction: kCAMediaTimingFunctionSpring, additive: true)
+                                characterComponentView.layer.animatePosition(from: CGPoint(x: -deltaPosition.x, y: -deltaPosition.y), to: CGPoint(), duration: 0.4, delay: delayNorm * delayWidth, timingFunction: kCAMediaTimingFunctionSpring, additive: true)
                             }
                         }
                         characterTransition.setFrame(view: characterComponentView, frame: characterFrame)
                         
-                        
                         if animateIn, !transition.animation.isImmediate {
-                            characterComponentView.layer.animateScale(from: 0.001, to: 1.0, duration: 0.4, delay: delayNorm * size.width, timingFunction: kCAMediaTimingFunctionSpring)
-                            //characterComponentView.layer.animateSpring(from: (characterSize.height * 0.5) as NSNumber, to: 0.0 as NSNumber, keyPath: "position.y", duration: 0.5, additive: true)
-                            characterComponentView.layer.animatePosition(from: CGPoint(x: 0.0, y: characterSize.height * 0.5), to: CGPoint(), duration: 0.4, delay: delayNorm * size.width, timingFunction: kCAMediaTimingFunctionSpring, additive: true)
-                            characterComponentView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.18, delay: delayNorm * size.width)
+                            var delayWidth: Double = 0.0
+                            if let firstDelayWidth {
+                                delayWidth = size.width - firstDelayWidth
+                            } else {
+                                firstDelayWidth = size.width
+                            }
+                            
+                            characterComponentView.layer.animateScale(from: 0.001, to: 1.0, duration: 0.4, delay: delayNorm * delayWidth, timingFunction: kCAMediaTimingFunctionSpring)
+                            characterComponentView.layer.animatePosition(from: CGPoint(x: 0.0, y: characterSize.height * 0.5), to: CGPoint(), duration: 0.4, delay: delayNorm * delayWidth, timingFunction: kCAMediaTimingFunctionSpring, additive: true)
+                            characterComponentView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.18, delay: delayNorm * delayWidth)
                         }
                     }
                     
@@ -160,6 +174,11 @@ public final class AnimatedTextComponent: Component {
                 }
             }
             
+            let outScaleTransition: ComponentTransition = .spring(duration: 0.4)
+            let outAlphaTransition: ComponentTransition = .easeInOut(duration: 0.18)
+            
+            var outFirstDelayWidth: CGFloat?
+            
             var removedKeys: [CharacterKey] = []
             for (key, characterView) in self.characters {
                 if !validKeys.contains(key) {
@@ -167,9 +186,16 @@ public final class AnimatedTextComponent: Component {
                     
                     if let characterComponentView = characterView.view {
                         if !transition.animation.isImmediate {
-                            characterComponentView.layer.animateScale(from: 1.0, to: 0.001, duration: 0.4, delay: delayNorm * characterComponentView.frame.minX, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
-                            characterComponentView.layer.animatePosition(from: CGPoint(), to: CGPoint(x: 0.0, y: -characterComponentView.bounds.height * 0.4), duration: 0.4, delay: delayNorm * characterComponentView.frame.minX, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, additive: true)
-                            characterComponentView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.18, delay: delayNorm * characterComponentView.frame.minX, removeOnCompletion: false, completion: { [weak characterComponentView] _ in
+                            var delayWidth: Double = 0.0
+                            if let outFirstDelayWidth {
+                                delayWidth = characterComponentView.frame.minX - outFirstDelayWidth
+                            } else {
+                                outFirstDelayWidth = characterComponentView.frame.minX
+                            }
+                            
+                            outScaleTransition.setScale(view: characterComponentView, scale: 0.01, delay: delayNorm * delayWidth)
+                            outScaleTransition.setPosition(view: characterComponentView, position: CGPoint(x: characterComponentView.center.x, y: characterComponentView.center.y - characterComponentView.bounds.height * 0.4), delay: delayNorm * delayWidth)
+                            outAlphaTransition.setAlpha(view: characterComponentView, alpha: 0.0, delay: delayNorm * delayWidth, completion: { [weak characterComponentView] _ in
                                 characterComponentView?.removeFromSuperview()
                             })
                         } else {
@@ -190,7 +216,7 @@ public final class AnimatedTextComponent: Component {
         return View(frame: CGRect())
     }
 
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }

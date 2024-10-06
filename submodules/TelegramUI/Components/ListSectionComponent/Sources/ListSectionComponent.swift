@@ -29,9 +29,9 @@ public final class ListSectionContentView: UIView {
         public let id: AnyHashable
         public let itemView: ItemView
         public let size: CGSize
-        public let transition: Transition
+        public let transition: ComponentTransition
         
-        public init(id: AnyHashable, itemView: ItemView, size: CGSize, transition: Transition) {
+        public init(id: AnyHashable, itemView: ItemView, size: CGSize, transition: ComponentTransition) {
             self.id = id
             self.itemView = itemView
             self.size = size
@@ -41,17 +41,20 @@ public final class ListSectionContentView: UIView {
     
     public final class Configuration {
         public let theme: PresentationTheme
+        public let isModal: Bool
         public let displaySeparators: Bool
         public let extendsItemHighlightToSection: Bool
         public let background: ListSectionComponent.Background
         
         public init(
             theme: PresentationTheme,
+            isModal: Bool = false,
             displaySeparators: Bool,
             extendsItemHighlightToSection: Bool,
             background: ListSectionComponent.Background
         ) {
             self.theme = theme
+            self.isModal = isModal
             self.displaySeparators = displaySeparators
             self.extendsItemHighlightToSection = extendsItemHighlightToSection
             self.background = background
@@ -109,28 +112,28 @@ public final class ListSectionContentView: UIView {
         self.highlightedItemId = itemId
         
         if configuration.extendsItemHighlightToSection {
-            let transition: Transition
+            let transition: ComponentTransition
             let backgroundColor: UIColor
             if itemId != nil {
                 transition = .immediate
                 backgroundColor = configuration.theme.list.itemHighlightedBackgroundColor
             } else {
                 transition = .easeInOut(duration: 0.2)
-                backgroundColor = configuration.theme.list.itemBlocksBackgroundColor
+                backgroundColor = configuration.isModal ? configuration.theme.list.itemModalBlocksBackgroundColor : configuration.theme.list.itemBlocksBackgroundColor
             }
             
             self.externalContentBackgroundView.updateColor(color: backgroundColor, transition: transition)
         } else {
             if let previousHighlightedItemId, let previousItemView = self.itemViews[previousHighlightedItemId] {
-                Transition.easeInOut(duration: 0.2).setBackgroundColor(layer: previousItemView.highlightLayer, color: .clear)
+                ComponentTransition.easeInOut(duration: 0.2).setBackgroundColor(layer: previousItemView.highlightLayer, color: .clear)
             }
             if let itemId, let itemView = self.itemViews[itemId] {
-                Transition.immediate.setBackgroundColor(layer: itemView.highlightLayer, color: configuration.theme.list.itemHighlightedBackgroundColor)
+                ComponentTransition.immediate.setBackgroundColor(layer: itemView.highlightLayer, color: configuration.theme.list.itemHighlightedBackgroundColor)
             }
         }
     }
     
-    public func update(configuration: Configuration, width: CGFloat, leftInset: CGFloat, readyItems: [ReadyItem], transition: Transition) -> UpdateResult {
+    public func update(configuration: Configuration, width: CGFloat, leftInset: CGFloat, readyItems: [ReadyItem], transition: ComponentTransition) -> UpdateResult {
         self.configuration = configuration
         
         switch configuration.background {
@@ -144,7 +147,7 @@ public final class ListSectionContentView: UIView {
         if self.highlightedItemId != nil && configuration.extendsItemHighlightToSection {
             backgroundColor = configuration.theme.list.itemHighlightedBackgroundColor
         } else {
-            backgroundColor = configuration.theme.list.itemBlocksBackgroundColor
+            backgroundColor = configuration.isModal ? configuration.theme.list.itemModalBlocksBackgroundColor : configuration.theme.list.itemBlocksBackgroundColor
         }
         self.externalContentBackgroundView.updateColor(color: backgroundColor, transition: transition)
         
@@ -305,6 +308,7 @@ public final class ListSectionComponent: Component {
     public let header: AnyComponent<Empty>?
     public let footer: AnyComponent<Empty>?
     public let items: [AnyComponentWithIdentity<Empty>]
+    public let isModal: Bool
     public let displaySeparators: Bool
     public let extendsItemHighlightToSection: Bool
     
@@ -314,6 +318,7 @@ public final class ListSectionComponent: Component {
         header: AnyComponent<Empty>?,
         footer: AnyComponent<Empty>?,
         items: [AnyComponentWithIdentity<Empty>],
+        isModal: Bool = false,
         displaySeparators: Bool = true,
         extendsItemHighlightToSection: Bool = false
     ) {
@@ -322,6 +327,7 @@ public final class ListSectionComponent: Component {
         self.header = header
         self.footer = footer
         self.items = items
+        self.isModal = isModal
         self.displaySeparators = displaySeparators
         self.extendsItemHighlightToSection = extendsItemHighlightToSection
     }
@@ -340,6 +346,9 @@ public final class ListSectionComponent: Component {
             return false
         }
         if lhs.items != rhs.items {
+            return false
+        }
+        if lhs.isModal != rhs.isModal {
             return false
         }
         if lhs.displaySeparators != rhs.displaySeparators {
@@ -376,7 +385,7 @@ public final class ListSectionComponent: Component {
             return self.contentView.itemViews[id]?.contents.view
         }
         
-        func update(component: ListSectionComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: ListSectionComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.component = component
             
             let headerSideInset: CGFloat = 16.0
@@ -448,6 +457,7 @@ public final class ListSectionComponent: Component {
             let contentResult = self.contentView.update(
                 configuration: ListSectionContentView.Configuration(
                     theme: component.theme,
+                    isModal: component.isModal,
                     displaySeparators: component.displaySeparators,
                     extendsItemHighlightToSection: component.extendsItemHighlightToSection,
                     background: component.background
@@ -511,7 +521,7 @@ public final class ListSectionComponent: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }
@@ -522,17 +532,20 @@ public final class ListSubSectionComponent: Component {
     public let theme: PresentationTheme
     public let leftInset: CGFloat
     public let items: [AnyComponentWithIdentity<Empty>]
+    public let isModal: Bool
     public let displaySeparators: Bool
     
     public init(
         theme: PresentationTheme,
         leftInset: CGFloat,
         items: [AnyComponentWithIdentity<Empty>],
+        isModal: Bool = false,
         displaySeparators: Bool = true
     ) {
         self.theme = theme
         self.leftInset = leftInset
         self.items = items
+        self.isModal = isModal
         self.displaySeparators = displaySeparators
     }
     
@@ -544,6 +557,9 @@ public final class ListSubSectionComponent: Component {
             return false
         }
         if lhs.items != rhs.items {
+            return false
+        }
+        if lhs.isModal != rhs.isModal {
             return false
         }
         if lhs.displaySeparators != rhs.displaySeparators {
@@ -576,7 +592,7 @@ public final class ListSubSectionComponent: Component {
             return self.contentView.itemViews[id]?.contents.view
         }
         
-        func update(component: ListSubSectionComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: ListSubSectionComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.component = component
             
             var contentHeight: CGFloat = 0.0
@@ -615,6 +631,7 @@ public final class ListSubSectionComponent: Component {
             let contentResult = self.contentView.update(
                 configuration: ListSectionContentView.Configuration(
                     theme: component.theme,
+                    isModal: component.isModal,
                     displaySeparators: component.displaySeparators,
                     extendsItemHighlightToSection: false,
                     background: .none(clipped: false)
@@ -642,7 +659,7 @@ public final class ListSubSectionComponent: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }

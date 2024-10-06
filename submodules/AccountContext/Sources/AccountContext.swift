@@ -14,6 +14,7 @@ import InAppPurchaseManager
 import AnimationCache
 import MultiAnimationRenderer
 import Photos
+import TextFormat
 
 public final class TelegramApplicationOpenUrlCompletion {
     public let completion: (Bool) -> Void
@@ -304,6 +305,7 @@ public enum ResolvedUrl {
     case startAttach(peerId: PeerId, payload: String?, choose: ResolvedBotChoosePeerTypes?)
     case invoice(slug: String, invoice: TelegramMediaInvoice?)
     case premiumOffer(reference: String?)
+    case starsTopup(amount: Int64, purpose: String?)
     case chatFolder(slug: String)
     case story(peerId: PeerId, id: Int32)
     case boost(peerId: PeerId?, status: ChannelBoostStatus?, myBoostStatus: MyBoostStatus?)
@@ -460,6 +462,18 @@ public final class NavigateToChatControllerParams {
         }
     }
     
+    public struct ReportReason {
+        public let title: String
+        public let option: Data
+        public let message: String?
+        
+        public init(title: String, option: Data, message: String?) {
+            self.title = title
+            self.option = option
+            self.message = message
+        }
+    }
+    
     public let navigationController: NavigationController
     public let chatController: ChatController?
     public let context: AccountContext
@@ -479,7 +493,7 @@ public final class NavigateToChatControllerParams {
     public let activateMessageSearch: (ChatSearchDomain, String)?
     public let peekData: ChatPeekTimeout?
     public let peerNearbyData: ChatPeerNearbyData?
-    public let reportReason: ReportReason?
+    public let reportReason: NavigateToChatControllerParams.ReportReason?
     public let animated: Bool
     public let options: NavigationAnimationOptions
     public let parentGroupId: PeerGroupId?
@@ -493,7 +507,7 @@ public final class NavigateToChatControllerParams {
     public let forceOpenChat: Bool
     public let customChatNavigationStack: [EnginePeer.Id]?
     
-    public init(navigationController: NavigationController, chatController: ChatController? = nil, context: AccountContext, chatLocation: Location, chatLocationContextHolder: Atomic<ChatLocationContextHolder?> = Atomic<ChatLocationContextHolder?>(value: nil), subject: ChatControllerSubject? = nil, botStart: ChatControllerInitialBotStart? = nil, attachBotStart: ChatControllerInitialAttachBotStart? = nil, botAppStart: ChatControllerInitialBotAppStart? = nil, updateTextInputState: ChatTextInputState? = nil, activateInput: ChatControllerActivateInput? = nil, keepStack: NavigateToChatKeepStack = .default, useExisting: Bool = true, useBackAnimation: Bool = false, purposefulAction: (() -> Void)? = nil, scrollToEndIfExists: Bool = false, activateMessageSearch: (ChatSearchDomain, String)? = nil, peekData: ChatPeekTimeout? = nil, peerNearbyData: ChatPeerNearbyData? = nil, reportReason: ReportReason? = nil, animated: Bool = true, options: NavigationAnimationOptions = [], parentGroupId: PeerGroupId? = nil, chatListFilter: Int32? = nil, chatNavigationStack: [ChatNavigationStackItem] = [], changeColors: Bool = false, setupController: @escaping (ChatController) -> Void = { _ in }, pushController: ((ChatController, Bool, @escaping () -> Void) -> Void)? = nil, completion: @escaping (ChatController) -> Void = { _ in }, chatListCompletion: @escaping (ChatListController) -> Void = { _ in }, forceOpenChat: Bool = false, customChatNavigationStack: [EnginePeer.Id]? = nil) {
+    public init(navigationController: NavigationController, chatController: ChatController? = nil, context: AccountContext, chatLocation: Location, chatLocationContextHolder: Atomic<ChatLocationContextHolder?> = Atomic<ChatLocationContextHolder?>(value: nil), subject: ChatControllerSubject? = nil, botStart: ChatControllerInitialBotStart? = nil, attachBotStart: ChatControllerInitialAttachBotStart? = nil, botAppStart: ChatControllerInitialBotAppStart? = nil, updateTextInputState: ChatTextInputState? = nil, activateInput: ChatControllerActivateInput? = nil, keepStack: NavigateToChatKeepStack = .default, useExisting: Bool = true, useBackAnimation: Bool = false, purposefulAction: (() -> Void)? = nil, scrollToEndIfExists: Bool = false, activateMessageSearch: (ChatSearchDomain, String)? = nil, peekData: ChatPeekTimeout? = nil, peerNearbyData: ChatPeerNearbyData? = nil, reportReason: NavigateToChatControllerParams.ReportReason? = nil, animated: Bool = true, options: NavigationAnimationOptions = [], parentGroupId: PeerGroupId? = nil, chatListFilter: Int32? = nil, chatNavigationStack: [ChatNavigationStackItem] = [], changeColors: Bool = false, setupController: @escaping (ChatController) -> Void = { _ in }, pushController: ((ChatController, Bool, @escaping () -> Void) -> Void)? = nil, completion: @escaping (ChatController) -> Void = { _ in }, chatListCompletion: @escaping (ChatListController) -> Void = { _ in }, forceOpenChat: Bool = false, customChatNavigationStack: [EnginePeer.Id]? = nil) {
         self.navigationController = navigationController
         self.chatController = chatController
         self.chatLocationContextHolder = chatLocationContextHolder
@@ -565,6 +579,8 @@ public enum PeerInfoControllerMode {
     case reaction(MessageId)
     case forumTopic(thread: ChatReplyThreadMessage)
     case recommendedChannels
+    case myProfile
+    case myProfileGifts
 }
 
 public enum ContactListActionItemInlineIconPosition {
@@ -612,106 +628,11 @@ public enum ContactListActionItemIcon : Equatable {
     }
 }
 
-public struct ContactListAdditionalOption: Equatable {
-    public let title: String
-    public let icon: ContactListActionItemIcon
-    public let action: () -> Void
-    public let clearHighlightAutomatically: Bool
-    
-    public init(title: String, icon: ContactListActionItemIcon, action: @escaping () -> Void, clearHighlightAutomatically: Bool = false) {
-        self.title = title
-        self.icon = icon
-        self.action = action
-        self.clearHighlightAutomatically = clearHighlightAutomatically
-    }
-    
-    public static func ==(lhs: ContactListAdditionalOption, rhs: ContactListAdditionalOption) -> Bool {
-        return lhs.title == rhs.title && lhs.icon == rhs.icon
-    }
-}
-
-public enum ContactListPeerId: Hashable {
-    case peer(PeerId)
-    case deviceContact(DeviceContactStableId)
-}
-
-public enum ContactListAction: Equatable {
-    case generic
-    case voiceCall
-    case videoCall
-    case more
-}
-
-public enum ContactListPeer: Equatable {
-    case peer(peer: Peer, isGlobal: Bool, participantCount: Int32?)
-    case deviceContact(DeviceContactStableId, DeviceContactBasicData)
-    
-    public var id: ContactListPeerId {
-        switch self {
-        case let .peer(peer, _, _):
-            return .peer(peer.id)
-        case let .deviceContact(id, _):
-            return .deviceContact(id)
-        }
-    }
-    
-    public var indexName: PeerIndexNameRepresentation {
-        switch self {
-        case let .peer(peer, _, _):
-            return peer.indexName
-        case let .deviceContact(_, contact):
-            return .personName(first: contact.firstName, last: contact.lastName, addressNames: [], phoneNumber: "")
-        }
-    }
-    
-    public static func ==(lhs: ContactListPeer, rhs: ContactListPeer) -> Bool {
-        switch lhs {
-        case let .peer(lhsPeer, lhsIsGlobal, lhsParticipantCount):
-            if case let .peer(rhsPeer, rhsIsGlobal, rhsParticipantCount) = rhs, lhsPeer.isEqual(rhsPeer), lhsIsGlobal == rhsIsGlobal, lhsParticipantCount == rhsParticipantCount {
-                return true
-            } else {
-                return false
-            }
-        case let .deviceContact(id, contact):
-            if case .deviceContact(id, contact) = rhs {
-                return true
-            } else {
-                return false
-            }
-        }
-    }
-}
-
-public final class ContactSelectionControllerParams {
-    public let context: AccountContext
-    public let updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?
-    public let autoDismiss: Bool
-    public let title: (PresentationStrings) -> String
-    public let options: [ContactListAdditionalOption]
-    public let displayDeviceContacts: Bool
-    public let displayCallIcons: Bool
-    public let multipleSelection: Bool
-    public let requirePhoneNumbers: Bool
-    public let confirmation: (ContactListPeer) -> Signal<Bool, NoError>
-    
-    public init(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, autoDismiss: Bool = true, title: @escaping (PresentationStrings) -> String, options: [ContactListAdditionalOption] = [], displayDeviceContacts: Bool = false, displayCallIcons: Bool = false, multipleSelection: Bool = false, requirePhoneNumbers: Bool = false, confirmation: @escaping (ContactListPeer) -> Signal<Bool, NoError> = { _ in .single(true) }) {
-        self.context = context
-        self.updatedPresentationData = updatedPresentationData
-        self.autoDismiss = autoDismiss
-        self.title = title
-        self.options = options
-        self.displayDeviceContacts = displayDeviceContacts
-        self.displayCallIcons = displayCallIcons
-        self.multipleSelection = multipleSelection
-        self.requirePhoneNumbers = requirePhoneNumbers
-        self.confirmation = confirmation
-    }
-}
-
 public enum ChatListSearchFilter: Equatable {
     case chats
     case topics
     case channels
+    case apps
     case media
     case downloads
     case links
@@ -729,18 +650,20 @@ public enum ChatListSearchFilter: Equatable {
             return 1
         case .channels:
             return 2
-        case .media:
+        case .apps:
             return 3
-        case .downloads:
+        case .media:
             return 4
-        case .links:
+        case .downloads:
             return 5
-        case .files:
+        case .links:
             return 6
-        case .music:
+        case .files:
             return 7
-        case .voice:
+        case .music:
             return 8
+        case .voice:
+            return 9
         case let .peer(peerId, _, _, _):
             return peerId.id._internalGetInt64Value()
         case let .date(_, date, _):
@@ -800,15 +723,18 @@ public struct StoryCameraTransitionOut {
     public weak var destinationView: UIView?
     public let destinationRect: CGRect
     public let destinationCornerRadius: CGFloat
+    public let completion: (() -> Void)?
     
     public init(
         destinationView: UIView,
         destinationRect: CGRect,
-        destinationCornerRadius: CGFloat
+        destinationCornerRadius: CGFloat,
+        completion: (() -> Void)? = nil
     ) {
         self.destinationView = destinationView
         self.destinationRect = destinationRect
         self.destinationCornerRadius = destinationCornerRadius
+        self.completion = completion
     }
 }
 
@@ -843,12 +769,12 @@ public class MediaEditorTransitionOutExternalState {
 }
 
 public protocol MediaEditorScreenResult {
-    
+    var target: Stories.PendingTarget { get }
 }
 
 public protocol TelegramRootControllerInterface: NavigationController {
     @discardableResult
-    func openStoryCamera(customTarget: EnginePeer.Id?, transitionIn: StoryCameraTransitionIn?, transitionedIn: @escaping () -> Void, transitionOut: @escaping (Stories.PendingTarget?, Bool) -> StoryCameraTransitionOut?) -> StoryCameraTransitionInCoordinator?
+    func openStoryCamera(customTarget: Stories.PendingTarget?, transitionIn: StoryCameraTransitionIn?, transitionedIn: @escaping () -> Void, transitionOut: @escaping (Stories.PendingTarget?, Bool) -> StoryCameraTransitionOut?) -> StoryCameraTransitionInCoordinator?
     func proceedWithStoryUpload(target: Stories.PendingTarget, result: MediaEditorScreenResult, existingMedia: EngineMedia?, forwardInfo: Stories.PendingForwardInfo?, externalState: MediaEditorTransitionOutExternalState, commit: @escaping (@escaping () -> Void) -> Void)
     
     func getContactsController() -> ViewController?
@@ -882,9 +808,55 @@ public enum CollectibleItemInfoScreenSubject {
     case username(String)
 }
 
+
+public enum StorySearchControllerScope {
+    case query(String)
+    case location(coordinates: MediaArea.Coordinates, venue: MediaArea.Venue)
+}
+
+public struct ChatControllerParams {
+    public let forcedTheme: PresentationTheme?
+    public let forcedNavigationBarTheme: PresentationTheme?
+    public let forcedWallpaper: TelegramWallpaper?
+    
+    public init(
+        forcedTheme: PresentationTheme? = nil,
+        forcedNavigationBarTheme: PresentationTheme? = nil,
+        forcedWallpaper: TelegramWallpaper? = nil
+    ) {
+        self.forcedTheme = forcedTheme
+        self.forcedNavigationBarTheme = forcedNavigationBarTheme
+        self.forcedWallpaper = forcedWallpaper
+    }
+}
+
+public enum ChatOpenWebViewSource: Equatable {
+    case generic
+    case menu
+    case inline(bot: EnginePeer)
+}
+
+public final class BotPreviewEditorTransitionOut {
+    public weak var destinationView: UIView?
+    public let destinationRect: CGRect
+    public let destinationCornerRadius: CGFloat
+    public let completion: (() -> Void)?
+    
+    public init(destinationView: UIView?, destinationRect: CGRect, destinationCornerRadius: CGFloat, completion: (() -> Void)?) {
+        self.destinationView = destinationView
+        self.destinationRect = destinationRect
+        self.destinationCornerRadius = destinationCornerRadius
+        self.completion = completion
+    }
+}
+
+public protocol MiniAppListScreenInitialData: AnyObject {
+}
+
 public protocol SharedAccountContext: AnyObject {
     var sharedContainerPath: String { get }
     var basePath: String { get }
+    var networkArguments: NetworkInitializationArguments { get }
     var mainWindow: Window1? { get }
     var accountManager: AccountManager<TelegramAccountManagerTypes> { get }
     var appLockContext: AppLockContext { get }
@@ -931,11 +903,11 @@ public protocol SharedAccountContext: AnyObject {
     func makeOverlayAudioPlayerController(context: AccountContext, chatLocation: ChatLocation, type: MediaManagerPlayerType, initialMessageId: MessageId, initialOrder: MusicPlaybackSettingsOrder, playlistLocation: SharedMediaPlaylistLocation?, parentNavigationController: NavigationController?) -> ViewController & OverlayAudioPlayerController
     func makePeerInfoController(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, peer: Peer, mode: PeerInfoControllerMode, avatarInitiallyExpanded: Bool, fromChat: Bool, requestsContext: PeerInvitationImportersContext?) -> ViewController?
     func makeChannelAdminController(context: AccountContext, peerId: PeerId, adminId: PeerId, initialParticipant: ChannelParticipant) -> ViewController?
-    func makeDeviceContactInfoController(context: AccountContext, subject: DeviceContactInfoSubject, completed: (() -> Void)?, cancelled: (() -> Void)?) -> ViewController
+    func makeDeviceContactInfoController(context: ShareControllerAccountContext, environment: ShareControllerEnvironment, subject: DeviceContactInfoSubject, completed: (() -> Void)?, cancelled: (() -> Void)?) -> ViewController
     func makePeersNearbyController(context: AccountContext) -> ViewController
     func makeComposeController(context: AccountContext) -> ViewController
     func makeChatListController(context: AccountContext, location: ChatListControllerLocation, controlsHistoryPreload: Bool, hideNetworkActivityStatus: Bool, previewing: Bool, enableDebugActions: Bool) -> ChatListController
-    func makeChatController(context: AccountContext, chatLocation: ChatLocation, subject: ChatControllerSubject?, botStart: ChatControllerInitialBotStart?, mode: ChatControllerPresentationMode) -> ChatController
+    func makeChatController(context: AccountContext, chatLocation: ChatLocation, subject: ChatControllerSubject?, botStart: ChatControllerInitialBotStart?, mode: ChatControllerPresentationMode, params: ChatControllerParams?) -> ChatController
     func makeChatHistoryListNode(
         context: AccountContext,
         updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>),
@@ -948,7 +920,7 @@ public protocol SharedAccountContext: AnyObject {
         selectedMessages: Signal<Set<MessageId>?, NoError>,
         mode: ChatHistoryListMode
     ) -> ChatHistoryListNode
-    func makeChatMessagePreviewItem(context: AccountContext, messages: [Message], theme: PresentationTheme, strings: PresentationStrings, wallpaper: TelegramWallpaper, fontSize: PresentationFontSize, chatBubbleCorners: PresentationChatBubbleCorners, dateTimeFormat: PresentationDateTimeFormat, nameOrder: PresentationPersonNameOrder, forcedResourceStatus: FileMediaResourceStatus?, tapMessage: ((Message) -> Void)?, clickThroughMessage: (() -> Void)?, backgroundNode: ASDisplayNode?, availableReactions: AvailableReactions?, accountPeer: Peer?, isCentered: Bool, isPreview: Bool, isStandalone: Bool) -> ListViewItem
+    func makeChatMessagePreviewItem(context: AccountContext, messages: [Message], theme: PresentationTheme, strings: PresentationStrings, wallpaper: TelegramWallpaper, fontSize: PresentationFontSize, chatBubbleCorners: PresentationChatBubbleCorners, dateTimeFormat: PresentationDateTimeFormat, nameOrder: PresentationPersonNameOrder, forcedResourceStatus: FileMediaResourceStatus?, tapMessage: ((Message) -> Void)?, clickThroughMessage: ((UIView?, CGPoint?) -> Void)?, backgroundNode: ASDisplayNode?, availableReactions: AvailableReactions?, accountPeer: Peer?, isCentered: Bool, isPreview: Bool, isStandalone: Bool) -> ListViewItem
     func makeChatMessageDateHeaderItem(context: AccountContext, timestamp: Int32, theme: PresentationTheme, strings: PresentationStrings, wallpaper: TelegramWallpaper, fontSize: PresentationFontSize, chatBubbleCorners: PresentationChatBubbleCorners, dateTimeFormat: PresentationDateTimeFormat, nameOrder: PresentationPersonNameOrder) -> ListViewItemHeader
     func makeChatMessageAvatarHeaderItem(context: AccountContext, timestamp: Int32, peer: Peer, message: Message, theme: PresentationTheme, strings: PresentationStrings, wallpaper: TelegramWallpaper, fontSize: PresentationFontSize, chatBubbleCorners: PresentationChatBubbleCorners, dateTimeFormat: PresentationDateTimeFormat, nameOrder: PresentationPersonNameOrder) -> ListViewItemHeader
     func makePeerSharedMediaController(context: AccountContext, peerId: PeerId) -> ViewController?
@@ -958,15 +930,16 @@ public protocol SharedAccountContext: AnyObject {
     func makeProxySettingsController(context: AccountContext) -> ViewController
     func makeLocalizationListController(context: AccountContext) -> ViewController
     func makeCreateGroupController(context: AccountContext, peerIds: [PeerId], initialTitle: String?, mode: CreateGroupMode, completion: ((PeerId, @escaping () -> Void) -> Void)?) -> ViewController
-    func makeChatRecentActionsController(context: AccountContext, peer: Peer, adminPeerId: PeerId?) -> ViewController
+    func makeChatRecentActionsController(context: AccountContext, peer: Peer, adminPeerId: PeerId?, starsState: StarsRevenueStats?) -> ViewController
     func makePrivacyAndSecurityController(context: AccountContext) -> ViewController
     func makeBioPrivacyController(context: AccountContext, settings: Promise<AccountPrivacySettings?>, present: @escaping (ViewController) -> Void)
     func makeBirthdayPrivacyController(context: AccountContext, settings: Promise<AccountPrivacySettings?>, openedFromBirthdayScreen: Bool, present: @escaping (ViewController) -> Void)
     func makeSetupTwoFactorAuthController(context: AccountContext) -> ViewController
     func makeStorageManagementController(context: AccountContext) -> ViewController
     func makeAttachmentFileController(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, bannedSendMedia: (Int32, Bool)?, presentGallery: @escaping () -> Void, presentFiles: @escaping () -> Void, send: @escaping (AnyMediaReference) -> Void) -> AttachmentFileController
-    func makeGalleryCaptionPanelView(context: AccountContext, chatLocation: ChatLocation, isScheduledMessages: Bool, customEmojiAvailable: Bool, present: @escaping (ViewController) -> Void, presentInGlobalOverlay: @escaping (ViewController) -> Void) -> NSObject?
+    func makeGalleryCaptionPanelView(context: AccountContext, chatLocation: ChatLocation, isScheduledMessages: Bool, isFile: Bool, customEmojiAvailable: Bool, present: @escaping (ViewController) -> Void, presentInGlobalOverlay: @escaping (ViewController) -> Void) -> NSObject?
     func makeHashtagSearchController(context: AccountContext, peer: EnginePeer?, query: String, all: Bool) -> ViewController
+    func makeStorySearchController(context: AccountContext, scope: StorySearchControllerScope, listContext: SearchStoryListContext?) -> ViewController
     func makeMyStoriesController(context: AccountContext, isArchive: Bool) -> ViewController
     func makeArchiveSettingsController(context: AccountContext) -> ViewController
     func makeFilterSettingsController(context: AccountContext, modal: Bool, scrollToTags: Bool, dismissed: (() -> Void)?) -> ViewController
@@ -989,7 +962,7 @@ public protocol SharedAccountContext: AnyObject {
     
     func navigateToChatController(_ params: NavigateToChatControllerParams)
     func navigateToForumChannel(context: AccountContext, peerId: EnginePeer.Id, navigationController: NavigationController)
-    func navigateToForumThread(context: AccountContext, peerId: EnginePeer.Id, threadId: Int64, messageId: EngineMessage.Id?,  navigationController: NavigationController, activateInput: ChatControllerActivateInput?, keepStack: NavigateToChatKeepStack) -> Signal<Never, NoError>
+    func navigateToForumThread(context: AccountContext, peerId: EnginePeer.Id, threadId: Int64, messageId: EngineMessage.Id?,  navigationController: NavigationController, activateInput: ChatControllerActivateInput?, scrollToEndIfExists: Bool, keepStack: NavigateToChatKeepStack) -> Signal<Never, NoError>
     func chatControllerForForumThread(context: AccountContext, peerId: EnginePeer.Id, threadId: Int64) -> Signal<ChatController, NoError>
     func openStorageUsage(context: AccountContext)
     func openLocationScreen(context: AccountContext, messageId: MessageId, navigationController: NavigationController)
@@ -998,13 +971,14 @@ public protocol SharedAccountContext: AnyObject {
     func chatAvailableMessageActions(engine: TelegramEngine, accountPeerId: EnginePeer.Id, messageIds: Set<EngineMessage.Id>, messages: [EngineMessage.Id: EngineMessage], peers: [EnginePeer.Id: EnginePeer]) -> Signal<ChatAvailableMessageActions, NoError>
     func resolveUrl(context: AccountContext, peerId: PeerId?, url: String, skipUrlAuth: Bool) -> Signal<ResolvedUrl, NoError>
     func resolveUrlWithProgress(context: AccountContext, peerId: PeerId?, url: String, skipUrlAuth: Bool) -> Signal<ResolveUrlResult, NoError>
-    func openResolvedUrl(_ resolvedUrl: ResolvedUrl, context: AccountContext, urlContext: OpenURLContext, navigationController: NavigationController?, forceExternal: Bool, openPeer: @escaping (EnginePeer, ChatControllerInteractionNavigateToPeer) -> Void, sendFile: ((FileMediaReference) -> Void)?, sendSticker: ((FileMediaReference, UIView, CGRect) -> Bool)?, requestMessageActionUrlAuth: ((MessageActionUrlSubject) -> Void)?, joinVoiceChat: ((PeerId, String?, CachedChannelData.ActiveCall) -> Void)?, present: @escaping (ViewController, Any?) -> Void, dismissInput: @escaping () -> Void, contentContext: Any?, progress: Promise<Bool>?, completion: (() -> Void)?)
+    func openResolvedUrl(_ resolvedUrl: ResolvedUrl, context: AccountContext, urlContext: OpenURLContext, navigationController: NavigationController?, forceExternal: Bool, openPeer: @escaping (EnginePeer, ChatControllerInteractionNavigateToPeer) -> Void, sendFile: ((FileMediaReference) -> Void)?, sendSticker: ((FileMediaReference, UIView, CGRect) -> Bool)?, sendEmoji: ((String, ChatTextInputTextCustomEmojiAttribute) -> Void)?, requestMessageActionUrlAuth: ((MessageActionUrlSubject) -> Void)?, joinVoiceChat: ((PeerId, String?, CachedChannelData.ActiveCall) -> Void)?, present: @escaping (ViewController, Any?) -> Void, dismissInput: @escaping () -> Void, contentContext: Any?, progress: Promise<Bool>?, completion: (() -> Void)?)
     func openAddContact(context: AccountContext, firstName: String, lastName: String, phoneNumber: String, label: String, present: @escaping (ViewController, Any?) -> Void, pushController: @escaping (ViewController) -> Void, completed: @escaping () -> Void)
     func openAddPersonContact(context: AccountContext, peerId: PeerId, pushController: @escaping (ViewController) -> Void, present: @escaping (ViewController, Any?) -> Void)
     func presentContactsWarningSuppression(context: AccountContext, present: (ViewController, Any?) -> Void)
     func openImagePicker(context: AccountContext, completion: @escaping (UIImage) -> Void, present: @escaping (ViewController) -> Void)
     func openAddPeerMembers(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, parentController: ViewController, groupPeer: Peer, selectAddMemberDisposable: MetaDisposable, addMemberDisposable: MetaDisposable)
-    func openChatInstantPage(context: AccountContext, message: Message, sourcePeerType: MediaAutoDownloadPeerType?, navigationController: NavigationController)
+    func makeInstantPageController(context: AccountContext, message: Message, sourcePeerType: MediaAutoDownloadPeerType?) -> ViewController?
+    func makeInstantPageController(context: AccountContext, webPage: TelegramMediaWebpage, anchor: String?, sourceLocation: InstantPageSourceLocation) -> ViewController
     func openChatWallpaper(context: AccountContext, message: Message, present: @escaping (ViewController, Any?) -> Void)
     
     func makeRecentSessionsController(context: AccountContext, activeSessionsContext: ActiveSessionsContext) -> ViewController & RecentSessionsController
@@ -1014,28 +988,60 @@ public protocol SharedAccountContext: AnyObject {
     func makePremiumIntroController(context: AccountContext, source: PremiumIntroSource, forceDark: Bool, dismissed: (() -> Void)?) -> ViewController
     func makePremiumDemoController(context: AccountContext, subject: PremiumDemoSubject, forceDark: Bool, action: @escaping () -> Void, dismissed: (() -> Void)?) -> ViewController
     func makePremiumLimitController(context: AccountContext, subject: PremiumLimitSubject, count: Int32, forceDark: Bool, cancel: @escaping () -> Void, action: @escaping () -> Bool) -> ViewController
-    func makePremiumGiftController(context: AccountContext, source: PremiumGiftSource, completion: (() -> Void)?) -> ViewController
+    
+    func makeStarsGiftController(context: AccountContext, birthdays: [EnginePeer.Id: TelegramBirthday]?, completion: @escaping (([EnginePeer.Id]) -> Void)) -> ViewController
+    func makePremiumGiftController(context: AccountContext, source: PremiumGiftSource, completion: (([EnginePeer.Id]) -> Void)?) -> ViewController
+    func makeGiftOptionsController(context: AccountContext, peerId: EnginePeer.Id, premiumOptions: [CachedPremiumGiftOption]) -> ViewController
     func makePremiumPrivacyControllerController(context: AccountContext, subject: PremiumPrivacySubject, peerId: EnginePeer.Id) -> ViewController
     func makePremiumBoostLevelsController(context: AccountContext, peerId: EnginePeer.Id, subject: BoostSubject, boostStatus: ChannelBoostStatus, myBoostStatus: MyBoostStatus, forceDark: Bool, openStats: (() -> Void)?) -> ViewController
     
-    func makeStickerPackScreen(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, mainStickerPack: StickerPackReference, stickerPacks: [StickerPackReference], loadedStickerPacks: [LoadedStickerPack], isEditing: Bool, expandIfNeeded: Bool, parentNavigationController: NavigationController?, sendSticker: ((FileMediaReference, UIView, CGRect) -> Bool)?) -> ViewController
+    func makeStickerPackScreen(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, mainStickerPack: StickerPackReference, stickerPacks: [StickerPackReference], loadedStickerPacks: [LoadedStickerPack], isEditing: Bool, expandIfNeeded: Bool, parentNavigationController: NavigationController?, sendSticker: ((FileMediaReference, UIView, CGRect) -> Bool)?, actionPerformed: ((Bool) -> Void)?) -> ViewController
     
     func makeMediaPickerScreen(context: AccountContext, hasSearch: Bool, completion: @escaping (Any) -> Void) -> ViewController
     
-    func makeStickerEditorScreen(context: AccountContext, source: Any?, transitionArguments: (UIView, CGRect, UIImage?)?, completion: @escaping (TelegramMediaFile, [String], @escaping () -> Void) -> Void, cancelled: @escaping () -> Void) -> ViewController
+    func makeStoryMediaEditorScreen(context: AccountContext, source: Any?, text: String?, link: (url: String, name: String?)?, completion: @escaping (MediaEditorScreenResult, @escaping (@escaping () -> Void) -> Void) -> Void) -> ViewController
+    
+    func makeBotPreviewEditorScreen(context: AccountContext, source: Any?, target: Stories.PendingTarget, transitionArguments: (UIView, CGRect, UIImage?)?, transitionOut: @escaping () -> BotPreviewEditorTransitionOut?, externalState: MediaEditorTransitionOutExternalState, completion: @escaping (MediaEditorScreenResult, @escaping (@escaping () -> Void) -> Void) -> Void, cancelled: @escaping () -> Void) -> ViewController
+    
+    func makeStickerEditorScreen(context: AccountContext, source: Any?, intro: Bool, transitionArguments: (UIView, CGRect, UIImage?)?, completion: @escaping (TelegramMediaFile, [String], @escaping () -> Void) -> Void, cancelled: @escaping () -> Void) -> ViewController
     
     func makeStickerMediaPickerScreen(context: AccountContext, getSourceRect: @escaping () -> CGRect?, completion: @escaping (Any?, UIView?, CGRect, UIImage?, Bool, @escaping (Bool?) -> (UIView, CGRect)?, @escaping () -> Void) -> Void, dismissed: @escaping () -> Void) -> ViewController
-    func makeStoryMediaPickerScreen(context: AccountContext, getSourceRect: @escaping () -> CGRect, completion: @escaping (Any, UIView, CGRect, UIImage?, @escaping (Bool?) -> (UIView, CGRect)?, @escaping () -> Void) -> Void, dismissed: @escaping () -> Void, groupsPresented: @escaping () -> Void) -> ViewController
+    func makeStoryMediaPickerScreen(context: AccountContext, isDark: Bool, getSourceRect: @escaping () -> CGRect, completion: @escaping (Any, UIView, CGRect, UIImage?, @escaping (Bool?) -> (UIView, CGRect)?, @escaping () -> Void) -> Void, dismissed: @escaping () -> Void, groupsPresented: @escaping () -> Void) -> ViewController
     
     func makeStickerPickerScreen(context: AccountContext, inputData: Promise<StickerPickerInput>, completion: @escaping (FileMediaReference) -> Void) -> ViewController
     
     func makeProxySettingsController(sharedContext: SharedAccountContext, account: UnauthorizedAccount) -> ViewController
+    
+    func makeDataAndStorageController(context: AccountContext, sensitiveContent: Bool) -> ViewController
     
     func makeInstalledStickerPacksController(context: AccountContext, mode: InstalledStickerPacksControllerMode, forceTheme: PresentationTheme?) -> ViewController
     
     func makeChannelStatsController(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, peerId: EnginePeer.Id, boosts: Bool, boostStatus: ChannelBoostStatus?) -> ViewController
     func makeMessagesStatsController(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, messageId: EngineMessage.Id) -> ViewController
     func makeStoryStatsController(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, peerId: EnginePeer.Id, storyId: Int32, storyItem: EngineStoryItem, fromStory: Bool) -> ViewController
+    
+    func makeStarsTransactionsScreen(context: AccountContext, starsContext: StarsContext) -> ViewController
+    func makeStarsPurchaseScreen(context: AccountContext, starsContext: StarsContext, options: [Any], purpose: StarsPurchasePurpose, completion: @escaping (Int64) -> Void) -> ViewController
+    func makeStarsTransferScreen(context: AccountContext, starsContext: StarsContext, invoice: TelegramMediaInvoice, source: BotPaymentInvoiceSource, extendedMedia: [TelegramExtendedMedia], inputData: Signal<(StarsContext.State, BotPaymentForm, EnginePeer?, EnginePeer?)?, NoError>, completion: @escaping (Bool) -> Void) -> ViewController
+    func makeStarsSubscriptionTransferScreen(context: AccountContext, starsContext: StarsContext, invoice: TelegramMediaInvoice, link: String, inputData: Signal<(StarsContext.State, BotPaymentForm, EnginePeer?, EnginePeer?)?, NoError>, navigateToPeer: @escaping (EnginePeer) -> Void) -> ViewController
+    func makeStarsTransactionScreen(context: AccountContext, transaction: StarsContext.State.Transaction, peer: EnginePeer) -> ViewController
+    func makeStarsReceiptScreen(context: AccountContext, receipt: BotPaymentReceipt) -> ViewController
+    func makeStarsSubscriptionScreen(context: AccountContext, subscription: StarsContext.State.Subscription, update: @escaping (Bool) -> Void) -> ViewController
+    func makeStarsSubscriptionScreen(context: AccountContext, peer: EnginePeer, pricing: StarsSubscriptionPricing, importer: PeerInvitationImportersState.Importer, usdRate: Double) -> ViewController
+    func makeStarsStatisticsScreen(context: AccountContext, peerId: EnginePeer.Id, revenueContext: StarsRevenueStatsContext) -> ViewController
+    func makeStarsAmountScreen(context: AccountContext, initialValue: Int64?, completion: @escaping (Int64) -> Void) -> ViewController
+    func makeStarsWithdrawalScreen(context: AccountContext, stats: StarsRevenueStats, completion: @escaping (Int64) -> Void) -> ViewController
+    func makeStarsGiftScreen(context: AccountContext, message: EngineMessage) -> ViewController
+    func makeStarsGiveawayBoostScreen(context: AccountContext, peerId: EnginePeer.Id, boost: ChannelBoostersContext.State.Boost) -> ViewController
+    func makeStarsIntroScreen(context: AccountContext) -> ViewController
+    func makeGiftViewScreen(context: AccountContext, message: EngineMessage) -> ViewController
+    
+    func makeContentReportScreen(context: AccountContext, subject: ReportContentSubject, forceDark: Bool, present: @escaping (ViewController) -> Void, completion: @escaping () -> Void, requestSelectMessages: ((String, Data, String?) -> Void)?)
+    
+    func makeMiniAppListScreenInitialData(context: AccountContext) -> Signal<MiniAppListScreenInitialData, NoError>
+    func makeMiniAppListScreen(context: AccountContext, initialData: MiniAppListScreenInitialData) -> ViewController
+    
+    func openWebApp(context: AccountContext, parentController: ViewController, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, peer: EnginePeer, threadId: Int64?, buttonText: String, url: String, simple: Bool, source: ChatOpenWebViewSource, skipTermsOfService: Bool)
     
     func makeDebugSettingsController(context: AccountContext?) -> ViewController?
     
@@ -1050,7 +1056,7 @@ public protocol SharedAccountContext: AnyObject {
     
     var hasGroupCallOnScreen: Signal<Bool, NoError> { get }
     var currentGroupCallController: ViewController? { get }
-    
+        
     func switchToAccount(id: AccountRecordId, fromSettingsController settingsController: ViewController?, withChatListController chatListController: ViewController?)
     func beginNewAuth(testingEnvironment: Bool)
 }
@@ -1067,6 +1073,42 @@ public protocol AccountGroupCallContext: AnyObject {
 public protocol AccountGroupCallContextCache: AnyObject {
 }
 
+public struct ChatSendMessageActionSheetControllerSendParameters {
+    public struct Effect {
+        public let id: Int64
+        
+        public init(id: Int64) {
+            self.id = id
+        }
+    }
+    
+    public var effect: Effect?
+    public var textIsAboveMedia: Bool
+    
+    public init(
+        effect: Effect?,
+        textIsAboveMedia: Bool
+    ) {
+        self.effect = effect
+        self.textIsAboveMedia = textIsAboveMedia
+    }
+}
+
+public enum ChatSendMessageActionSheetControllerSendMode {
+    case generic
+    case silently
+    case whenOnline
+}
+
+public protocol ChatSendMessageActionSheetControllerSourceSendButtonNode: ASDisplayNode {
+    func makeCustomContents() -> UIView?
+}
+
+public protocol ChatSendMessageActionSheetController: ViewController {
+    typealias SendMode = ChatSendMessageActionSheetControllerSendMode
+    typealias SendParameters = ChatSendMessageActionSheetControllerSendParameters
+}
+
 public protocol AccountContext: AnyObject {
     var sharedContext: SharedAccountContext { get }
     var account: Account { get }
@@ -1081,6 +1123,7 @@ public protocol AccountContext: AnyObject {
     var wallpaperUploadManager: WallpaperUploadManager? { get }
     var watchManager: WatchManager? { get }
     var inAppPurchaseManager: InAppPurchaseManager? { get }
+    var starsContext: StarsContext? { get }
     
     var currentLimitsConfiguration: Atomic<LimitsConfiguration> { get }
     var currentContentSettings: Atomic<ContentSettings> { get }
@@ -1095,6 +1138,8 @@ public protocol AccountContext: AnyObject {
     var animatedEmojiStickers: Signal<[String: [StickerPackItem]], NoError> { get }
     var animatedEmojiStickersValue: [String: [StickerPackItem]] { get }
     var additionalAnimatedEmojiStickers: Signal<[String: [Int: StickerPackItem]], NoError> { get }
+    var availableReactions: Signal<AvailableReactions?, NoError> { get }
+    var availableMessageEffects: Signal<AvailableMessageEffects?, NoError> { get }
     
     var isPremium: Bool { get }
     var userLimits: EngineConfiguration.UserLimits { get }
@@ -1110,7 +1155,7 @@ public protocol AccountContext: AnyObject {
     func chatLocationUnreadCount(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>) -> Signal<Int, NoError>
     func applyMaxReadIndex(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>, messageIndex: MessageIndex)
     
-    func scheduleGroupCall(peerId: PeerId)
+    func scheduleGroupCall(peerId: PeerId, parentController: ViewController)
     func joinGroupCall(peerId: PeerId, invite: String?, requestJoinAsPeerId: ((@escaping (PeerId?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription)
     func requestCall(peerId: PeerId, isVideo: Bool, completion: @escaping () -> Void)
 }
@@ -1220,4 +1265,29 @@ public struct StickersSearchConfiguration {
             return .defaultValue
         }
     }
+}
+
+public protocol ShareControllerAccountContext: AnyObject {
+    var accountId: AccountRecordId { get }
+    var accountPeerId: EnginePeer.Id { get }
+    var stateManager: AccountStateManager { get }
+    var engineData: TelegramEngine.EngineData { get }
+    var animationCache: AnimationCache { get }
+    var animationRenderer: MultiAnimationRenderer { get }
+    var contentSettings: ContentSettings { get }
+    var appConfiguration: AppConfiguration { get }
+    
+    func resolveInlineStickers(fileIds: [Int64]) -> Signal<[Int64: TelegramMediaFile], NoError>
+}
+
+public protocol ShareControllerEnvironment: AnyObject {
+    var presentationData: PresentationData { get }
+    var updatedPresentationData: Signal<PresentationData, NoError> { get }
+    var isMainApp: Bool { get }
+    var energyUsageSettings: EnergyUsageSettings { get }
+    
+    var mediaManager: MediaManager? { get }
+    
+    func setAccountUserInterfaceInUse(id: AccountRecordId) -> Disposable
+    func donateSendMessageIntent(account: ShareControllerAccountContext, peerIds: [EnginePeer.Id])
 }

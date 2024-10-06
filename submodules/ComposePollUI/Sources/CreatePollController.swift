@@ -134,7 +134,7 @@ private struct OrderedLinkedList<T: Equatable>: Sequence, Equatable {
     }
 }
 
-private let maxTextLength = 255
+private let maxTextLength = 200
 private let maxOptionLength = 100
 private let maxOptionCount = 10
 
@@ -147,6 +147,7 @@ private func processPollText(_ text: String) -> String {
 }
 
 private final class CreatePollControllerArguments {
+    let context: AccountContext
     let updatePollText: (String) -> Void
     let updateOptionText: (Int, String, Bool) -> Void
     let moveToNextOption: (Int) -> Void
@@ -163,7 +164,8 @@ private final class CreatePollControllerArguments {
     let solutionTextFocused: (Bool) -> Void
     let questionTextFocused: (Bool) -> Void
     
-    init(updatePollText: @escaping (String) -> Void, updateOptionText: @escaping (Int, String, Bool) -> Void, moveToNextOption: @escaping (Int) -> Void, moveToPreviousOption: @escaping (Int) -> Void, removeOption: @escaping (Int, Bool) -> Void, optionFocused: @escaping (Int, Bool) -> Void, setItemIdWithRevealedOptions: @escaping (Int?, Int?) -> Void, toggleOptionSelected: @escaping (Int) -> Void, updateAnonymous: @escaping (Bool) -> Void, updateMultipleChoice: @escaping (Bool) -> Void, displayMultipleChoiceDisabled: @escaping () -> Void, updateQuiz: @escaping (Bool) -> Void, updateSolutionText: @escaping (NSAttributedString) -> Void, solutionTextFocused: @escaping (Bool) -> Void, questionTextFocused: @escaping (Bool) -> Void) {
+    init(context: AccountContext, updatePollText: @escaping (String) -> Void, updateOptionText: @escaping (Int, String, Bool) -> Void, moveToNextOption: @escaping (Int) -> Void, moveToPreviousOption: @escaping (Int) -> Void, removeOption: @escaping (Int, Bool) -> Void, optionFocused: @escaping (Int, Bool) -> Void, setItemIdWithRevealedOptions: @escaping (Int?, Int?) -> Void, toggleOptionSelected: @escaping (Int) -> Void, updateAnonymous: @escaping (Bool) -> Void, updateMultipleChoice: @escaping (Bool) -> Void, displayMultipleChoiceDisabled: @escaping () -> Void, updateQuiz: @escaping (Bool) -> Void, updateSolutionText: @escaping (NSAttributedString) -> Void, solutionTextFocused: @escaping (Bool) -> Void, questionTextFocused: @escaping (Bool) -> Void) {
+        self.context = context
         self.updatePollText = updatePollText
         self.updateOptionText = updateOptionText
         self.moveToNextOption = moveToNextOption
@@ -397,7 +399,7 @@ private enum CreatePollEntry: ItemListNodeEntry {
         case let .quizSolutionHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .quizSolutionText(placeholder, text):
-            return CreatePollTextInputItem(presentationData: presentationData, text: text.value, placeholder: placeholder, maxLength: CreatePollTextInputItemTextLimit(value: 200, display: true), sectionId: self.section, style: .blocks, textUpdated: { text in
+            return CreatePollTextInputItem(context: arguments.context, presentationData: presentationData, text: text.value, placeholder: placeholder, maxLength: CreatePollTextInputItemTextLimit(value: 200, display: true), sectionId: self.section, style: .blocks, textUpdated: { text in
                 arguments.updateSolutionText(text)
             }, updatedFocus: { value in
                 arguments.solutionTextFocused(value)
@@ -530,33 +532,7 @@ public final class ComposedPoll {
 }
 
 private final class CreatePollContext: AttachmentMediaPickerContext {
-    var selectionCount: Signal<Int, NoError> {
-        return .single(0)
-    }
-    
-    var caption: Signal<NSAttributedString?, NoError> {
-        return .single(nil)
-    }
-    
-    public var loadingProgress: Signal<CGFloat?, NoError> {
-        return .single(nil)
-    }
-    
-    public var mainButtonState: Signal<AttachmentMainButtonState?, NoError> {
-        return .single(nil)
-    }
-            
-    func setCaption(_ caption: NSAttributedString) {
-    }
-    
-    func send(mode: AttachmentMediaPickerSendMode, attachmentMode: AttachmentMediaPickerAttachmentMode) {
-    }
-    
-    func schedule() {
-    }
-    
-    func mainButtonAction() {
-    }
+
 }
 
 
@@ -571,6 +547,7 @@ public class CreatePollControllerImpl: ItemListController, AttachmentContainable
     public var cancelPanGesture: () -> Void = { }
     public var isContainerPanning: () -> Bool = { return false }
     public var isContainerExpanded: () -> Bool = { return false }
+    public var isMinimized: Bool = false
     
     public var mediaPickerContext: AttachmentMediaPickerContext? {
         return CreatePollContext()
@@ -653,7 +630,7 @@ private func legacyCreatePollController(context: AccountContext, updatedPresenta
     let updateAddressNameDisposable = MetaDisposable()
     actionsDisposable.add(updateAddressNameDisposable)
     
-    let arguments = CreatePollControllerArguments(updatePollText: { value in
+    let arguments = CreatePollControllerArguments(context: context, updatePollText: { value in
         updateState { state in
             var state = state
             state.focusOptionId = nil

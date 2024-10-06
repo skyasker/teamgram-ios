@@ -233,7 +233,7 @@ private final class PhoneView: UIView {
             hintDimensions: CGSize(width: 1170, height: 1754),
             storeAfterDownload: nil
         )
-        let videoNode = UniversalVideoNode(postbox: context.account.postbox, audioSession: context.sharedContext.mediaManager.audioSession, manager: context.sharedContext.mediaManager.universalVideoManager, decoration: VideoDecoration(), content: videoContent, priority: .embedded)
+        let videoNode = UniversalVideoNode(accountId: context.account.id, postbox: context.account.postbox, audioSession: context.sharedContext.mediaManager.audioSession, manager: context.sharedContext.mediaManager.universalVideoManager, decoration: VideoDecoration(), content: videoContent, priority: .embedded)
         videoNode.canAttachContent = true
         self.videoNode = videoNode
         
@@ -475,7 +475,7 @@ final class PhoneDemoComponent: Component {
             self.playbackStatusDisposable?.dispose()
         }
         
-        public func update(component: PhoneDemoComponent, availableSize: CGSize, environment: Environment<DemoPageEnvironment>, transition: Transition) -> CGSize {
+        public func update(component: PhoneDemoComponent, availableSize: CGSize, environment: Environment<DemoPageEnvironment>, transition: ComponentTransition) -> CGSize {
             self.component = component
             
             self.containerView.frame = CGRect(origin: .zero, size: availableSize)
@@ -614,7 +614,7 @@ final class PhoneDemoComponent: Component {
         return View()
     }
     
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<DemoPageEnvironment>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<DemoPageEnvironment>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, environment: environment, transition: transition)
     }
 }

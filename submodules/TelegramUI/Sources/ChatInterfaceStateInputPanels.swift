@@ -52,7 +52,12 @@ func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState
             currentPanel.interfaceInteraction = interfaceInteraction
             return (currentPanel, selectionPanel)
         } else {
-            let panel = ChatTagSearchInputPanelNode(theme: chatPresentationInterfaceState.theme)
+            var alwaysShowTotalMessagesCount = false
+            if case let .customChatContents(contents) = chatPresentationInterfaceState.subject, case .hashTagSearch = contents.kind {
+                alwaysShowTotalMessagesCount = true
+            }
+            
+            let panel = ChatTagSearchInputPanelNode(theme: chatPresentationInterfaceState.theme, alwaysShowTotalMessagesCount: alwaysShowTotalMessagesCount)
             panel.context = context
             panel.interfaceInteraction = interfaceInteraction
             return (panel, selectionPanel)
@@ -132,7 +137,7 @@ func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState
     var displayInputTextPanel = false
     
     if let peer = chatPresentationInterfaceState.renderedPeer?.peer {
-        if peer.id.isReplies {
+        if peer.id.isRepliesOrVerificationCodes {
             if let currentPanel = (currentPanel as? ChatChannelSubscriberInputPanelNode) ?? (currentSecondaryPanel as? ChatChannelSubscriberInputPanelNode) {
                 return (currentPanel, nil)
             } else {
@@ -403,6 +408,8 @@ func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState
     
     if case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject {
         switch customChatContents.kind {
+        case .hashTagSearch:
+            displayInputTextPanel = false
         case .quickReplyMessageInput, .businessLinkSetup:
             displayInputTextPanel = true
         }

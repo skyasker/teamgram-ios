@@ -266,7 +266,7 @@ final class ComposePollScreenComponent: Component {
             }
         }
         
-        private func updateScrolling(transition: Transition) {
+        private func updateScrolling(transition: ComponentTransition) {
             let navigationAlphaDistance: CGFloat = 16.0
             let navigationAlpha: CGFloat = max(0.0, min(1.0, self.scrollView.contentOffset.y / navigationAlphaDistance))
             if let controller = self.environment?.controller(), let navigationBar = controller.navigationBar {
@@ -297,7 +297,7 @@ final class ComposePollScreenComponent: Component {
             effectiveInputHeight: CGFloat,
             metrics: LayoutMetrics,
             deviceMetrics: DeviceMetrics,
-            transition: Transition
+            transition: ComponentTransition
         ) -> CGFloat {
             let bottomInset: CGFloat = bottomInset + 8.0
             let bottomContainerInset: CGFloat = 0.0
@@ -377,8 +377,8 @@ final class ComposePollScreenComponent: Component {
                 
                 if needsInputActivation {
                     let inputNodeFrame = inputNodeFrame.offsetBy(dx: 0.0, dy: inputNodeHeight)
-                    Transition.immediate.setFrame(layer: inputMediaNode.layer, frame: inputNodeFrame)
-                    Transition.immediate.setFrame(layer: self.inputMediaNodeBackground, frame: inputNodeBackgroundFrame)
+                    ComponentTransition.immediate.setFrame(layer: inputMediaNode.layer, frame: inputNodeFrame)
+                    ComponentTransition.immediate.setFrame(layer: self.inputMediaNodeBackground, frame: inputNodeBackgroundFrame)
                 }
                 
                 if animateIn {
@@ -472,7 +472,7 @@ final class ComposePollScreenComponent: Component {
             return textInputStates
         }
         
-        func update(component: ComposePollScreenComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: Transition) -> CGSize {
+        func update(component: ComposePollScreenComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
             self.isUpdating = true
             defer {
                 self.isUpdating = false
@@ -488,6 +488,8 @@ final class ComposePollScreenComponent: Component {
             self.environment = environment
             
             if self.component == nil {
+                self.isQuiz = component.isQuiz ?? false
+                
                 self.pollOptions.append(ComposePollScreenComponent.PollOption(
                     id: self.nextPollOptionId
                 ))
@@ -622,7 +624,7 @@ final class ComposePollScreenComponent: Component {
                             return
                         }
                         if !self.isUpdating {
-                            self.state?.updated(transition: Transition(transition))
+                            self.state?.updated(transition: ComponentTransition(transition))
                         }
                     }
                 )
@@ -657,6 +659,7 @@ final class ComposePollScreenComponent: Component {
                 },
                 assumeIsEditing: self.inputMediaNodeTargetTag === self.pollTextFieldTag,
                 characterLimit: component.initialData.maxPollTextLength,
+                emptyLineHandling: .allowed,
                 returnKeyAction: { [weak self] in
                     guard let self else {
                         return
@@ -751,6 +754,7 @@ final class ComposePollScreenComponent: Component {
                     },
                     assumeIsEditing: self.inputMediaNodeTargetTag === pollOption.textFieldTag,
                     characterLimit: component.initialData.maxPollOptionLength,
+                    emptyLineHandling: .notAllowed,
                     returnKeyAction: { [weak self] in
                         guard let self else {
                             return
@@ -1000,28 +1004,35 @@ final class ComposePollScreenComponent: Component {
             contentHeight += pollOptionsSectionFooterSize.height
             contentHeight += sectionSpacing
             
+            var canBePublic = true
+            if case let .channel(channel) = component.peer, case .broadcast = channel.info {
+                canBePublic = false
+            }
+            
             var pollSettingsSectionItems: [AnyComponentWithIdentity<Empty>] = []
-            pollSettingsSectionItems.append(AnyComponentWithIdentity(id: "anonymous", component: AnyComponent(ListActionItemComponent(
-                theme: environment.theme,
-                title: AnyComponent(VStack([
-                    AnyComponentWithIdentity(id: AnyHashable(0), component: AnyComponent(MultilineTextComponent(
-                        text: .plain(NSAttributedString(
-                            string: environment.strings.CreatePoll_Anonymous,
-                            font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
-                            textColor: environment.theme.list.itemPrimaryTextColor
-                        )),
-                        maximumNumberOfLines: 1
-                    ))),
-                ], alignment: .left, spacing: 2.0)),
-                accessory: .toggle(ListActionItemComponent.Toggle(style: .regular, isOn: self.isAnonymous, action: { [weak self] _ in
-                    guard let self else {
-                        return
-                    }
-                    self.isAnonymous = !self.isAnonymous
-                    self.state?.updated(transition: .spring(duration: 0.4))
-                })),
-                action: nil
-            ))))
+            if canBePublic {
+                pollSettingsSectionItems.append(AnyComponentWithIdentity(id: "anonymous", component: AnyComponent(ListActionItemComponent(
+                    theme: environment.theme,
+                    title: AnyComponent(VStack([
+                        AnyComponentWithIdentity(id: AnyHashable(0), component: AnyComponent(MultilineTextComponent(
+                            text: .plain(NSAttributedString(
+                                string: environment.strings.CreatePoll_Anonymous,
+                                font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                textColor: environment.theme.list.itemPrimaryTextColor
+                            )),
+                            maximumNumberOfLines: 1
+                        ))),
+                    ], alignment: .left, spacing: 2.0)),
+                    accessory: .toggle(ListActionItemComponent.Toggle(style: .regular, isOn: self.isAnonymous, action: { [weak self] _ in
+                        guard let self else {
+                            return
+                        }
+                        self.isAnonymous = !self.isAnonymous
+                        self.state?.updated(transition: .spring(duration: 0.4))
+                    })),
+                    action: nil
+                ))))
+            }
             pollSettingsSectionItems.append(AnyComponentWithIdentity(id: "multiAnswer", component: AnyComponent(ListActionItemComponent(
                 theme: environment.theme,
                 title: AnyComponent(VStack([
@@ -1132,6 +1143,7 @@ final class ComposePollScreenComponent: Component {
                             },
                             assumeIsEditing: self.inputMediaNodeTargetTag === self.quizAnswerTextInputTag,
                             characterLimit: component.initialData.maxPollTextLength,
+                            emptyLineHandling: .allowed,
                             returnKeyAction: { [weak self] in
                                 guard let self else {
                                     return
@@ -1455,7 +1467,7 @@ final class ComposePollScreenComponent: Component {
         return View()
     }
     
-    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: Transition) -> CGSize {
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }
@@ -1479,6 +1491,8 @@ public class ComposePollScreen: ViewControllerComponentContainer, AttachmentCont
     private var isDismissed: Bool = false
     
     fileprivate private(set) var sendButtonItem: UIBarButtonItem?
+    
+    public var isMinimized: Bool = false
     
     public var requestAttachmentMenuExpansion: () -> Void = {
     }
@@ -1564,7 +1578,7 @@ public class ComposePollScreen: ViewControllerComponentContainer, AttachmentCont
     
     public static func initialData(context: AccountContext) -> InitialData {
         return InitialData(
-            maxPollTextLength: Int(context.userLimits.maxCaptionLength),
+            maxPollTextLength: Int(200),
             maxPollOptionLength: 100
         )
     }

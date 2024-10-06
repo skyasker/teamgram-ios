@@ -7,6 +7,8 @@ public enum MediaArea: Codable, Equatable {
         case coordinates
         case value
         case flags
+        case temperature
+        case color
     }
         
     public struct Coordinates: Codable, Equatable {
@@ -16,6 +18,7 @@ public enum MediaArea: Codable, Equatable {
             case width
             case height
             case rotation
+            case cornerRadius
         }
         
         public var x: Double
@@ -23,19 +26,22 @@ public enum MediaArea: Codable, Equatable {
         public var width: Double
         public var height: Double
         public var rotation: Double
+        public var cornerRadius: Double?
         
         public init(
             x: Double,
             y: Double,
             width: Double,
             height: Double,
-            rotation: Double
+            rotation: Double,
+            cornerRadius: Double?
         ) {
             self.x = x
             self.y = y
             self.width = width
             self.height = height
             self.rotation = rotation
+            self.cornerRadius = cornerRadius
         }
         
         public init(from decoder: Decoder) throws {
@@ -46,6 +52,7 @@ public enum MediaArea: Codable, Equatable {
             self.width = try container.decode(Double.self, forKey: .width)
             self.height = try container.decode(Double.self, forKey: .height)
             self.rotation = try container.decode(Double.self, forKey: .rotation)
+            self.cornerRadius = try container.decodeIfPresent(Double.self, forKey: .cornerRadius)
         }
         
         public func encode(to encoder: Encoder) throws {
@@ -56,6 +63,7 @@ public enum MediaArea: Codable, Equatable {
             try container.encode(self.width, forKey: .width)
             try container.encode(self.height, forKey: .height)
             try container.encode(self.rotation, forKey: .rotation)
+            try container.encodeIfPresent(self.cornerRadius, forKey: .cornerRadius)
         }
     }
     
@@ -64,6 +72,7 @@ public enum MediaArea: Codable, Equatable {
             case latitude
             case longitude
             case venue
+            case address
             case queryId
             case resultId
         }
@@ -71,6 +80,7 @@ public enum MediaArea: Codable, Equatable {
         public let latitude: Double
         public let longitude: Double
         public let venue: MapVenue?
+        public let address: MapGeoAddress?
         public let queryId: Int64?
         public let resultId: String?
         
@@ -78,12 +88,14 @@ public enum MediaArea: Codable, Equatable {
             latitude: Double,
             longitude: Double,
             venue: MapVenue?,
+            address: MapGeoAddress?,
             queryId: Int64?,
             resultId: String?
         ) {
             self.latitude = latitude
             self.longitude = longitude
             self.venue = venue
+            self.address = address
             self.queryId = queryId
             self.resultId = resultId
         }
@@ -98,6 +110,12 @@ public enum MediaArea: Codable, Equatable {
                 self.venue = PostboxDecoder(buffer: MemoryBuffer(data: venueData)).decodeRootObject() as? MapVenue
             } else {
                 self.venue = nil
+            }
+            
+            if let addressData = try container.decodeIfPresent(Data.self, forKey: .address) {
+                self.address = PostboxDecoder(buffer: MemoryBuffer(data: addressData)).decodeRootObject() as? MapGeoAddress
+            } else {
+                self.address = nil
             }
             
             self.queryId = try container.decodeIfPresent(Int64.self, forKey: .queryId)
@@ -117,6 +135,13 @@ public enum MediaArea: Codable, Equatable {
                 try container.encode(venueData, forKey: .venue)
             }
             
+            if let address = self.address {
+                let encoder = PostboxEncoder()
+                encoder.encodeRootObject(address)
+                let addressData = encoder.makeData()
+                try container.encode(addressData, forKey: .address)
+            }
+            
             try container.encodeIfPresent(self.queryId, forKey: .queryId)
             try container.encodeIfPresent(self.resultId, forKey: .resultId)
         }
@@ -125,7 +150,9 @@ public enum MediaArea: Codable, Equatable {
     case venue(coordinates: Coordinates, venue: Venue)
     case reaction(coordinates: Coordinates, reaction: MessageReaction.Reaction, flags: ReactionFlags)
     case channelMessage(coordinates: Coordinates, messageId: EngineMessage.Id)
-    
+    case link(coordinates: Coordinates, url: String)
+    case weather(coordinates: Coordinates, emoji: String, temperature: Double, color: Int32)
+   
     public struct ReactionFlags: OptionSet {
         public var rawValue: Int32
         
@@ -140,12 +167,13 @@ public enum MediaArea: Codable, Equatable {
         public static let isDark = ReactionFlags(rawValue: 1 << 0)
         public static let isFlipped = ReactionFlags(rawValue: 1 << 1)
     }
-
     
     private enum MediaAreaType: Int32 {
         case venue
         case reaction
         case channelMessage
+        case link
+        case weather
     }
     
     public enum DecodingError: Error {
@@ -172,6 +200,16 @@ public enum MediaArea: Codable, Equatable {
             let coordinates = try container.decode(MediaArea.Coordinates.self, forKey: .coordinates)
             let messageId = try container.decode(MessageId.self, forKey: .value)
             self = .channelMessage(coordinates: coordinates, messageId: messageId)
+        case .link:
+            let coordinates = try container.decode(MediaArea.Coordinates.self, forKey: .coordinates)
+            let url = try container.decode(String.self, forKey: .value)
+            self = .link(coordinates: coordinates, url: url)
+        case .weather:
+            let coordinates = try container.decode(MediaArea.Coordinates.self, forKey: .coordinates)
+            let emoji = try container.decode(String.self, forKey: .value)
+            let temperature = try container.decode(Double.self, forKey: .temperature)
+            let color = try container.decodeIfPresent(Int32.self, forKey: .color) ?? 0
+            self = .weather(coordinates: coordinates, emoji: emoji, temperature: temperature, color: color)
         }
     }
     
@@ -192,6 +230,16 @@ public enum MediaArea: Codable, Equatable {
             try container.encode(MediaAreaType.channelMessage.rawValue, forKey: .type)
             try container.encode(coordinates, forKey: .coordinates)
             try container.encode(messageId, forKey: .value)
+        case let .link(coordinates, url):
+            try container.encode(MediaAreaType.link.rawValue, forKey: .type)
+            try container.encode(coordinates, forKey: .coordinates)
+            try container.encode(url, forKey: .value)
+        case let .weather(coordinates, emoji, temperature, color):
+            try container.encode(MediaAreaType.weather.rawValue, forKey: .type)
+            try container.encode(coordinates, forKey: .coordinates)
+            try container.encode(emoji, forKey: .value)
+            try container.encode(temperature, forKey: .temperature)
+            try container.encode(color, forKey: .color)
         }
     }
 }
@@ -204,6 +252,10 @@ public extension MediaArea {
         case let .reaction(coordinates, _, _):
             return coordinates
         case let .channelMessage(coordinates, _):
+            return coordinates
+        case let .link(coordinates, _):
+            return coordinates
+        case let .weather(coordinates, _, _, _):
             return coordinates
         }
     }

@@ -13,6 +13,7 @@ import AccountContext
 import AlertUI
 import PresentationDataUtils
 import ItemListAvatarAndNameInfoItem
+import OldChannelsController
 
 private final class ChannelBannedMemberControllerArguments {
     let context: AccountContext
@@ -215,7 +216,7 @@ private enum ChannelBannedMemberEntry: ItemListNodeEntry {
         let arguments = arguments as! ChannelBannedMemberControllerArguments
         switch self {
             case let .info(_, _, dateTimeFormat, peer, presence):
-                return ItemListAvatarAndNameInfoItem(accountContext: arguments.context, presentationData: presentationData, dateTimeFormat: dateTimeFormat, mode: .generic, peer: peer, presence: presence, memberCount: nil, state: ItemListAvatarAndNameInfoItemState(), sectionId: self.section, style: .blocks(withTopInset: true, withExtendedBottomInset: false), editingNameUpdated: { _ in
+                return ItemListAvatarAndNameInfoItem(itemContext: .accountContext(arguments.context), presentationData: presentationData, dateTimeFormat: dateTimeFormat, mode: .generic, peer: peer, presence: presence, memberCount: nil, state: ItemListAvatarAndNameInfoItemState(), sectionId: self.section, style: .blocks(withTopInset: true, withExtendedBottomInset: false), editingNameUpdated: { _ in
                 }, avatarTapped: {
                 })
             case let .rightsHeader(_, text):
@@ -302,7 +303,7 @@ private func channelBannedMemberControllerEntries(presentationData: Presentation
         let currentRightsFlags: TelegramChatBannedRightsFlags
         if let updatedFlags = state.updatedFlags {
             currentRightsFlags = updatedFlags
-        } else if let initialParticipant = initialParticipant, case let .member(_, _, _, maybeBanInfo, _) = initialParticipant, let banInfo = maybeBanInfo {
+        } else if let initialParticipant = initialParticipant, case let .member(_, _, _, maybeBanInfo, _, _) = initialParticipant, let banInfo = maybeBanInfo {
             currentRightsFlags = banInfo.rights.flags
         } else {
             currentRightsFlags = defaultBannedRights.flags
@@ -311,7 +312,7 @@ private func channelBannedMemberControllerEntries(presentationData: Presentation
         let currentTimeout: Int32
         if let updatedTimeout = state.updatedTimeout {
             currentTimeout = updatedTimeout
-        } else if let initialParticipant = initialParticipant, case let .member(_, _, _, maybeBanInfo, _) = initialParticipant, let banInfo = maybeBanInfo {
+        } else if let initialParticipant = initialParticipant, case let .member(_, _, _, maybeBanInfo, _, _) = initialParticipant, let banInfo = maybeBanInfo {
             currentTimeout = banInfo.rights.untilDate
         } else {
             currentTimeout = Int32.max
@@ -350,7 +351,7 @@ private func channelBannedMemberControllerEntries(presentationData: Presentation
         
         entries.append(.timeout(presentationData.theme, presentationData.strings.GroupPermission_Duration, currentTimeoutString))
         
-        if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo?, _) = initialParticipant, let initialBannedBy = initialBannedBy {
+        if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo?, _, _) = initialParticipant, let initialBannedBy = initialBannedBy {
             entries.append(.exceptionInfo(presentationData.theme, presentationData.strings.GroupPermission_AddedInfo(initialBannedBy.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder), stringForRelativeSymbolicTimestamp(strings: presentationData.strings, relativeTimestamp: banInfo.timestamp, relativeTo: state.referenceTimestamp, dateTimeFormat: presentationData.dateTimeFormat)).string))
             entries.append(.delete(presentationData.theme, presentationData.strings.GroupPermission_Delete))
         }
@@ -362,7 +363,7 @@ private func channelBannedMemberControllerEntries(presentationData: Presentation
         let currentRightsFlags: TelegramChatBannedRightsFlags
         if let updatedFlags = state.updatedFlags {
             currentRightsFlags = updatedFlags
-        } else if let initialParticipant = initialParticipant, case let .member(_, _, _, maybeBanInfo, _) = initialParticipant, let banInfo = maybeBanInfo {
+        } else if let initialParticipant = initialParticipant, case let .member(_, _, _, maybeBanInfo, _, _) = initialParticipant, let banInfo = maybeBanInfo {
             currentRightsFlags = banInfo.rights.flags
         } else {
             currentRightsFlags = defaultBannedRightsFlags
@@ -371,7 +372,7 @@ private func channelBannedMemberControllerEntries(presentationData: Presentation
         let currentTimeout: Int32
         if let updatedTimeout = state.updatedTimeout {
             currentTimeout = updatedTimeout
-        } else if let initialParticipant = initialParticipant, case let .member(_, _, _, maybeBanInfo, _) = initialParticipant, let banInfo = maybeBanInfo {
+        } else if let initialParticipant = initialParticipant, case let .member(_, _, _, maybeBanInfo, _, _) = initialParticipant, let banInfo = maybeBanInfo {
             currentTimeout = banInfo.rights.untilDate
         } else {
             currentTimeout = Int32.max
@@ -410,7 +411,7 @@ private func channelBannedMemberControllerEntries(presentationData: Presentation
         
         entries.append(.timeout(presentationData.theme, presentationData.strings.GroupPermission_Duration, currentTimeoutString))
         
-        if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo?, _) = initialParticipant, let initialBannedBy = initialBannedBy {
+        if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo?, _, _) = initialParticipant, let initialBannedBy = initialBannedBy {
             entries.append(.exceptionInfo(presentationData.theme, presentationData.strings.GroupPermission_AddedInfo(initialBannedBy.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder), stringForRelativeSymbolicTimestamp(strings: presentationData.strings, relativeTimestamp: banInfo.timestamp, relativeTo: state.referenceTimestamp, dateTimeFormat: presentationData.dateTimeFormat)).string))
             entries.append(.delete(presentationData.theme, presentationData.strings.GroupPermission_Delete))
         }
@@ -461,7 +462,7 @@ public func channelBannedMemberController(context: AccountContext, updatedPresen
                 var effectiveRightsFlags: TelegramChatBannedRightsFlags
                 if let updatedFlags = state.updatedFlags {
                     effectiveRightsFlags = updatedFlags
-                } else if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo?, _) = initialParticipant {
+                } else if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo?, _, _) = initialParticipant {
                     effectiveRightsFlags = banInfo.rights.flags
                 } else {
                     effectiveRightsFlags = defaultBannedRightsFlags
@@ -670,7 +671,7 @@ public func channelBannedMemberController(context: AccountContext, updatedPresen
                         }
                         
                         if updateFlags == nil && updateTimeout == nil {
-                            if case let .member(_, _, _, maybeBanInfo, _) = initialParticipant {
+                            if case let .member(_, _, _, maybeBanInfo, _, _) = initialParticipant {
                                 if maybeBanInfo == nil {
                                     updateFlags = defaultBannedRightsFlags
                                     updateTimeout = Int32.max
@@ -682,7 +683,7 @@ public func channelBannedMemberController(context: AccountContext, updatedPresen
                             let currentRightsFlags: TelegramChatBannedRightsFlags
                             if let updatedFlags = updateFlags {
                                 currentRightsFlags = updatedFlags
-                            } else if case let .member(_, _, _, maybeBanInfo, _) = initialParticipant, let banInfo = maybeBanInfo {
+                            } else if case let .member(_, _, _, maybeBanInfo, _, _) = initialParticipant, let banInfo = maybeBanInfo {
                                 currentRightsFlags = banInfo.rights.flags
                             } else {
                                 currentRightsFlags = defaultBannedRightsFlags
@@ -691,7 +692,7 @@ public func channelBannedMemberController(context: AccountContext, updatedPresen
                             let currentTimeout: Int32
                             if let updateTimeout = updateTimeout {
                                 currentTimeout = updateTimeout
-                            } else if case let .member(_, _, _, maybeBanInfo, _) = initialParticipant, let banInfo = maybeBanInfo {
+                            } else if case let .member(_, _, _, maybeBanInfo, _, _) = initialParticipant, let banInfo = maybeBanInfo {
                                 currentTimeout = banInfo.rights.untilDate
                             } else {
                                 currentTimeout = Int32.max
@@ -723,7 +724,7 @@ public func channelBannedMemberController(context: AccountContext, updatedPresen
                     }
                     
                     var previousRights: TelegramChatBannedRights?
-                    if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo, _) = initialParticipant, banInfo != nil {
+                    if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo, _, _) = initialParticipant, banInfo != nil {
                         previousRights = banInfo?.rights
                     }
                     
@@ -824,7 +825,7 @@ public func channelBannedMemberController(context: AccountContext, updatedPresen
         }
         
         let title: String
-        if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo, _) = initialParticipant, banInfo != nil {
+        if let initialParticipant = initialParticipant, case let .member(_, _, _, banInfo, _, _) = initialParticipant, banInfo != nil {
             title = presentationData.strings.GroupPermission_Title
         } else {
             title = presentationData.strings.GroupPermission_NewTitle

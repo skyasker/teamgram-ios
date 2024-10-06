@@ -257,7 +257,7 @@ public final class DrawingTextEntityView: DrawingEntityView, UITextViewDelegate 
         
         self.updateEditingPosition(animated: true)
         
-        if let selectionView = self.selectionView as? DrawingTextEntititySelectionView {
+        if let selectionView = self.selectionView as? DrawingTextEntitySelectionView {
             selectionView.alpha = 0.0
             if !self.textEntity.text.string.isEmpty {
                 selectionView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)
@@ -353,7 +353,7 @@ public final class DrawingTextEntityView: DrawingEntityView, UITextViewDelegate 
         }
         self.update(animated: false)
         
-        if let selectionView = self.selectionView as? DrawingTextEntititySelectionView {
+        if let selectionView = self.selectionView as? DrawingTextEntitySelectionView {
             selectionView.alpha = 1.0
             selectionView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
         }
@@ -587,7 +587,7 @@ public final class DrawingTextEntityView: DrawingEntityView, UITextViewDelegate 
     }
     
     override func updateSelectionView() {
-        guard let selectionView = self.selectionView as? DrawingTextEntititySelectionView else {
+        guard let selectionView = self.selectionView as? DrawingTextEntitySelectionView else {
             return
         }
         self.pushIdentityTransformForMeasurement()
@@ -609,7 +609,7 @@ public final class DrawingTextEntityView: DrawingEntityView, UITextViewDelegate 
         if let selectionView = self.selectionView {
             return selectionView
         }
-        let selectionView = DrawingTextEntititySelectionView()
+        let selectionView = DrawingTextEntitySelectionView()
         selectionView.entityView = self
         return selectionView
     }
@@ -624,6 +624,15 @@ public final class DrawingTextEntityView: DrawingEntityView, UITextViewDelegate 
     }
     
     func getRenderSubEntities() -> [DrawingEntity] {
+        var explicitlyStaticStickers = Set<Int64>()
+        if let customEmojiContainerView = self.customEmojiContainerView {
+            for (key, view) in customEmojiContainerView.emojiLayers {
+                if let view = view as? EmojiTextAttachmentView, let numFrames = view.contentLayer.numFrames, numFrames == 1 {
+                    explicitlyStaticStickers.insert(key.id)
+                }
+            }
+        }
+        
         let textSize = self.textView.bounds.size
         let textPosition = self.textEntity.position
         let scale = self.textEntity.scale
@@ -638,6 +647,9 @@ public final class DrawingTextEntityView: DrawingEntityView, UITextViewDelegate 
             let emojiTextPosition = emojiRect.center.offsetBy(dx: -textSize.width / 2.0, dy: -textSize.height / 2.0)
                         
             let entity = DrawingStickerEntity(content: .file(.standalone(media: file), .sticker))
+            if explicitlyStaticStickers.contains(file.fileId.id) {
+                entity.isExplicitlyStatic = true
+            }
             entity.referenceDrawingSize = CGSize(width: itemSize * 4.0, height: itemSize * 4.0)
             entity.scale = scale
             entity.position = textPosition.offsetBy(
@@ -655,7 +667,7 @@ public final class DrawingTextEntityView: DrawingEntityView, UITextViewDelegate 
     }
 }
 
-final class DrawingTextEntititySelectionView: DrawingEntitySelectionView {
+final class DrawingTextEntitySelectionView: DrawingEntitySelectionView {
     private let border = SimpleShapeLayer()
     private let leftHandle = SimpleShapeLayer()
     private let rightHandle = SimpleShapeLayer()

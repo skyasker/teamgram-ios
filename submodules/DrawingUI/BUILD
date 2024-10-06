@@ -97,6 +97,7 @@ swift_library(
         "//submodules/ChatPresentationInterfaceState:ChatPresentationInterfaceState",
         "//submodules/StickerPackPreviewUI:StickerPackPreviewUI",
         "//submodules/TelegramUI/Components/LottieComponent",
+        "//submodules/TelegramUI/Components/LottieComponentResourceContent",
         "//submodules/ImageTransparency",
         "//submodules/GalleryUI",
         "//submodules/MediaPlayer:UniversalMediaPlayer",
@@ -108,6 +109,7 @@ swift_library(
         "//submodules/TelegramUI/Components/DustEffect",
         "//submodules/TelegramUI/Components/DynamicCornerRadiusView",
         "//submodules/TelegramUI/Components/StickerPickerScreen",
+        "//submodules/TelegramUI/Components/MediaEditor/ImageObjectSeparation",
     ],
     visibility = [
         "//visibility:public",

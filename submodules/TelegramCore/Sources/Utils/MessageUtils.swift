@@ -344,6 +344,9 @@ public extension Message {
                 return false
             }
         } else if self.author?.id == accountPeerId {
+            if let channel = self.peers[self.id.peerId] as? TelegramChannel, case .broadcast = channel.info {
+                return true
+            }
             return false
         } else if self.flags.contains(.Incoming) {
             return true
@@ -374,6 +377,18 @@ public extension Message {
         } else {
             return false
         }
+    }
+    
+    func isSensitiveContent(platform: String) -> Bool {
+        if let rule = self.restrictedContentAttribute?.rules.first(where: { $0.reason == "sensitive" }) {
+            if rule.platform == "all" || rule.platform == platform {
+                return true
+            }
+        }
+        if let peer = self.peers[self.id.peerId], peer.hasSensitiveContent(platform: platform) {
+            return true
+        }
+        return false
     }
 }
 
@@ -437,6 +452,16 @@ public extension Message {
         }
         return nil
     }
+    
+    var factCheckAttribute: FactCheckMessageAttribute? {
+        for attribute in self.attributes {
+            if let attribute = attribute as? FactCheckMessageAttribute {
+                return attribute
+            }
+        }
+        return nil
+    }
+    
     var inlineBotAttribute: InlineBusinessBotMessageAttribute? {
         for attribute in self.attributes {
             if let attribute = attribute as? InlineBusinessBotMessageAttribute {
@@ -512,12 +537,41 @@ public extension Message {
         }
         return nil
     }
+    
+    var paidContent: TelegramMediaPaidContent? {
+        return self.media.first(where: { $0 is TelegramMediaPaidContent }) as? TelegramMediaPaidContent
+    }
+    
+    var authorSignatureAttribute: AuthorSignatureMessageAttribute? {
+        for attribute in self.attributes {
+            if let attribute = attribute as? AuthorSignatureMessageAttribute {
+                return attribute
+            }
+        }
+        return nil
+    }
 }
 
 public extension Message {
     var webpagePreviewAttribute: WebpagePreviewMessageAttribute? {
         for attribute in self.attributes {
             if let attribute = attribute as? WebpagePreviewMessageAttribute {
+                return attribute
+            }
+        }
+        return nil
+    }
+    var invertMedia: Bool {
+        for attribute in self.attributes {
+            if let _ = attribute as? InvertMediaMessageAttribute {
+                return true
+            }
+        }
+        return false
+    }
+    var invertMediaAttribute: InvertMediaMessageAttribute? {
+        for attribute in self.attributes {
+            if let attribute = attribute as? InvertMediaMessageAttribute {
                 return attribute
             }
         }
@@ -545,7 +599,7 @@ public func _internal_parseMediaAttachment(data: Data) -> Media? {
     if let photo = object as? Api.Photo {
         return telegramMediaImageFromApiPhoto(photo)
     } else if let file = object as? Api.Document {
-        return telegramMediaFileFromApiDocument(file)
+        return telegramMediaFileFromApiDocument(file, altDocuments: [])
     } else {
         return nil
     }

@@ -25,13 +25,14 @@ public final class OpenChatMessageParams {
     public let chatFilterTag: MemoryBuffer?
     public let chatLocationContextHolder: Atomic<ChatLocationContextHolder?>?
     public let message: Message
+    public let mediaIndex: Int?
     public let standalone: Bool
     public let reverseMessageGalleryOrder: Bool
     public let mode: ChatControllerInteractionOpenMessageMode
     public let navigationController: NavigationController?
     public let modal: Bool
     public let dismissInput: () -> Void
-    public let present: (ViewController, Any?) -> Void
+    public let present: (ViewController, Any?, PresentationContextType) -> Void
     public let transitionNode: (MessageId, Media, Bool) -> (ASDisplayNode, CGRect, () -> (UIView?, UIView?))?
     public let addToTransitionSurface: (UIView) -> Void
     public let openUrl: (String) -> Void
@@ -55,13 +56,14 @@ public final class OpenChatMessageParams {
         chatFilterTag: MemoryBuffer?,
         chatLocationContextHolder: Atomic<ChatLocationContextHolder?>?,
         message: Message,
+        mediaIndex: Int? = nil,
         standalone: Bool,
         reverseMessageGalleryOrder: Bool,
         mode: ChatControllerInteractionOpenMessageMode = .default,
         navigationController: NavigationController?,
         modal: Bool = false,
         dismissInput: @escaping () -> Void,
-        present: @escaping (ViewController, Any?) -> Void,
+        present: @escaping (ViewController, Any?, PresentationContextType) -> Void,
         transitionNode: @escaping (MessageId, Media, Bool) -> (ASDisplayNode, CGRect, () -> (UIView?, UIView?))?,
         addToTransitionSurface: @escaping (UIView) -> Void,
         openUrl: @escaping (String) -> Void,
@@ -84,6 +86,7 @@ public final class OpenChatMessageParams {
         self.chatFilterTag = chatFilterTag
         self.chatLocationContextHolder = chatLocationContextHolder
         self.message = message
+        self.mediaIndex = mediaIndex
         self.standalone = standalone
         self.reverseMessageGalleryOrder = reverseMessageGalleryOrder
         self.mode = mode

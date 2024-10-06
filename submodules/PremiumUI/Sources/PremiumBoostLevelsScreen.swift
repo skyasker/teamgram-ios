@@ -861,11 +861,11 @@ private final class SheetContent: CombinedComponent {
                 )
                 context.add(alternateText
                     .position(CGPoint(x: context.availableSize.width / 2.0, y: contentSize.height + alternateText.size.height / 2.0))
-                    .appear(Transition.Appear({ _, view, transition in
+                    .appear(ComponentTransition.Appear({ _, view, transition in
                         transition.animatePosition(view: view, from: CGPoint(x: 0.0, y: 64.0), to: .zero, additive: true)
                         transition.animateAlpha(view: view, from: 0.0, to: 1.0)
                     }))
-                        .disappear(Transition.Disappear({ view, transition, completion in
+                        .disappear(ComponentTransition.Disappear({ view, transition, completion in
                             view.superview?.sendSubviewToBack(view)
                             transition.animatePosition(view: view, from: .zero, to: CGPoint(x: 0.0, y: -64.0), additive: true)
                             transition.setAlpha(view: view, alpha: 0.0, completion: { _ in
@@ -887,11 +887,11 @@ private final class SheetContent: CombinedComponent {
                 )
                 context.add(text
                     .position(CGPoint(x: context.availableSize.width / 2.0, y: contentSize.height + text.size.height / 2.0))
-                    .appear(Transition.Appear({ _, view, transition in
+                    .appear(ComponentTransition.Appear({ _, view, transition in
                         transition.animatePosition(view: view, from: CGPoint(x: 0.0, y: 64.0), to: .zero, additive: true)
                         transition.animateAlpha(view: view, from: 0.0, to: 1.0)
                     }))
-                        .disappear(Transition.Disappear({ view, transition, completion in
+                        .disappear(ComponentTransition.Disappear({ view, transition, completion in
                             view.superview?.sendSubviewToBack(view)
                             transition.animatePosition(view: view, from: .zero, to: CGPoint(x: 0.0, y: -64.0), additive: true)
                             transition.setAlpha(view: view, alpha: 0.0, completion: { _ in
@@ -1021,7 +1021,8 @@ private final class SheetContent: CombinedComponent {
                         state.cachedChevronImage = (generateTintedImage(image: UIImage(bundleImageName: "Settings/TextArrowRight"), color: linkColor)!, theme)
                     }
                     
-                    let giftString = isGroup ? strings.Premium_Group_BoostByGiftDescription : strings.Premium_BoostByGiftDescription2
+                    
+                    let giftString = isGroup ? strings.Premium_Group_BoostByGiveawayDescription : strings.Premium_BoostByGiveawayDescription
                     let giftAttributedString = parseMarkdownIntoAttributedString(giftString, attributes: markdownAttributes).mutableCopy() as! NSMutableAttributedString
                     
                     if let range = giftAttributedString.string.range(of: ">"), let chevronImage = state.cachedChevronImage?.0 {
@@ -1792,7 +1793,7 @@ public class PremiumBoostLevelsScreen: ViewController {
             self.controller?.updateModalStyleOverlayTransitionFactor(0.0, transition: positionTransition)
         }
         
-        func requestLayout(transition: Transition) {
+        func requestLayout(transition: ComponentTransition) {
             guard let layout = self.currentLayout else {
                 return
             }
@@ -1800,7 +1801,7 @@ public class PremiumBoostLevelsScreen: ViewController {
         }
                 
         private var dismissOffset: CGFloat?
-        func containerLayoutUpdated(layout: ContainerViewLayout, forceUpdate: Bool = false, transition: Transition) {
+        func containerLayoutUpdated(layout: ContainerViewLayout, forceUpdate: Bool = false, transition: ComponentTransition) {
             guard !self.isDismissing else {
                 return
             }
@@ -1897,7 +1898,7 @@ public class PremiumBoostLevelsScreen: ViewController {
         }
         
         private var boostState: InternalBoostState.DisplayData?
-        func updated(transition: Transition, forceUpdate: Bool = false) {
+        func updated(transition: ComponentTransition, forceUpdate: Bool = false) {
             guard let controller = self.controller else {
                 return
             }
@@ -2165,24 +2166,24 @@ public class PremiumBoostLevelsScreen: ViewController {
                             let initialVelocity: CGFloat = distance.isZero ? 0.0 : abs(velocity.y / distance)
                             let transition = ContainedViewLayoutTransition.animated(duration: 0.45, curve: .customSpring(damping: 124.0, initialVelocity: initialVelocity))
 
-                            self.containerLayoutUpdated(layout: layout, transition: Transition(transition))
+                            self.containerLayoutUpdated(layout: layout, transition: ComponentTransition(transition))
                         } else {
                             self.isExpanded = true
                             
-                            self.containerLayoutUpdated(layout: layout, transition: Transition(.animated(duration: 0.3, curve: .easeInOut)))
+                            self.containerLayoutUpdated(layout: layout, transition: ComponentTransition(.animated(duration: 0.3, curve: .easeInOut)))
                         }
                     } else if scrollView != nil, (velocity.y < -300.0 || offset < topInset / 2.0) {
                         let initialVelocity: CGFloat = offset.isZero ? 0.0 : abs(velocity.y / offset)
                         let transition = ContainedViewLayoutTransition.animated(duration: 0.45, curve: .customSpring(damping: 124.0, initialVelocity: initialVelocity))
                         self.isExpanded = true
                        
-                        self.containerLayoutUpdated(layout: layout, transition: Transition(transition))
+                        self.containerLayoutUpdated(layout: layout, transition: ComponentTransition(transition))
                     } else {
                         if let scrollView = scrollView {
                             scrollView.setContentOffset(CGPoint(x: 0.0, y: -scrollView.contentInset.top), animated: false)
                         }
                         
-                        self.containerLayoutUpdated(layout: layout, transition: Transition(.animated(duration: 0.3, curve: .easeInOut)))
+                        self.containerLayoutUpdated(layout: layout, transition: ComponentTransition(.animated(duration: 0.3, curve: .easeInOut)))
                     }
                     
                     if !dismissing {
@@ -2195,7 +2196,7 @@ public class PremiumBoostLevelsScreen: ViewController {
                 case .cancelled:
                     self.panGestureArguments = nil
                     
-                    self.containerLayoutUpdated(layout: layout, transition: Transition(.animated(duration: 0.3, curve: .easeInOut)))
+                    self.containerLayoutUpdated(layout: layout, transition: ComponentTransition(.animated(duration: 0.3, curve: .easeInOut)))
                 default:
                     break
             }
@@ -2220,7 +2221,7 @@ public class PremiumBoostLevelsScreen: ViewController {
             guard let layout = self.currentLayout else {
                 return
             }
-            self.containerLayoutUpdated(layout: layout, transition: Transition(transition))
+            self.containerLayoutUpdated(layout: layout, transition: ComponentTransition(transition))
         }
         
         private var currentMyBoostCount: Int32 = 0
@@ -2560,7 +2561,7 @@ public class PremiumBoostLevelsScreen: ViewController {
         self.currentLayout = layout
         super.containerLayoutUpdated(layout, transition: transition)
                 
-        self.node.containerLayoutUpdated(layout: layout, transition: Transition(transition))
+        self.node.containerLayoutUpdated(layout: layout, transition: ComponentTransition(transition))
     }
 }
 
@@ -2614,7 +2615,7 @@ private final class FooterComponent: Component {
             fatalError("init(coder:) has not been implemented")
         }
         
-        func update(component: FooterComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: FooterComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.component = component
             self.state = state
             
@@ -2677,7 +2678,7 @@ private final class FooterComponent: Component {
         return View(frame: CGRect())
     }
 
-    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }

@@ -40,12 +40,12 @@ public class MediaDustLayer: CALayer {
         emitter.setValue(0.01, forKey: "massRange")
         self.emitter = emitter
         
-        let alphaBehavior = createEmitterBehavior(type: "valueOverLife")
+        let alphaBehavior = CAEmitterCell.createEmitterBehavior(type: "valueOverLife")
         alphaBehavior.setValue("color.alpha", forKey: "keyPath")
         alphaBehavior.setValue([0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1], forKey: "values")
         alphaBehavior.setValue(true, forKey: "additive")
         
-        let scaleBehavior = createEmitterBehavior(type: "valueOverLife")
+        let scaleBehavior = CAEmitterCell.createEmitterBehavior(type: "valueOverLife")
         scaleBehavior.setValue("scale", forKey: "keyPath")
         scaleBehavior.setValue([0.0, 0.5], forKey: "values")
         scaleBehavior.setValue([0.0, 0.05], forKey: "locations")
@@ -105,6 +105,7 @@ public class MediaDustNode: ASDisplayNode {
     private var staticNode: ASImageNode?
     private var staticParams: CGSize?
     
+    public var revealOnTap = true
     public var isRevealed = false
     private var isExploding = false
     
@@ -154,31 +155,31 @@ public class MediaDustNode: ASDisplayNode {
             emitter.setValue(0.01, forKey: "massRange")
             self.emitter = emitter
             
-            let alphaBehavior = createEmitterBehavior(type: "valueOverLife")
+            let alphaBehavior = CAEmitterCell.createEmitterBehavior(type: "valueOverLife")
             alphaBehavior.setValue("color.alpha", forKey: "keyPath")
             alphaBehavior.setValue([0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, -1], forKey: "values")
             alphaBehavior.setValue(true, forKey: "additive")
             
-            let scaleBehavior = createEmitterBehavior(type: "valueOverLife")
+            let scaleBehavior = CAEmitterCell.createEmitterBehavior(type: "valueOverLife")
             scaleBehavior.setValue("scale", forKey: "keyPath")
             scaleBehavior.setValue([0.0, 0.5], forKey: "values")
             scaleBehavior.setValue([0.0, 0.05], forKey: "locations")
             
-            let randomAttractor0 = createEmitterBehavior(type: "simpleAttractor")
+            let randomAttractor0 = CAEmitterCell.createEmitterBehavior(type: "simpleAttractor")
             randomAttractor0.setValue("randomAttractor0", forKey: "name")
             randomAttractor0.setValue(20, forKey: "falloff")
             randomAttractor0.setValue(35, forKey: "radius")
             randomAttractor0.setValue(5, forKey: "stiffness")
             randomAttractor0.setValue(NSValue(cgPoint: .zero), forKey: "position")
             
-            let randomAttractor1 = createEmitterBehavior(type: "simpleAttractor")
+            let randomAttractor1 = CAEmitterCell.createEmitterBehavior(type: "simpleAttractor")
             randomAttractor1.setValue("randomAttractor1", forKey: "name")
             randomAttractor1.setValue(20, forKey: "falloff")
             randomAttractor1.setValue(35, forKey: "radius")
             randomAttractor1.setValue(5, forKey: "stiffness")
             randomAttractor1.setValue(NSValue(cgPoint: .zero), forKey: "position")
             
-            let fingerAttractor = createEmitterBehavior(type: "simpleAttractor")
+            let fingerAttractor = CAEmitterCell.createEmitterBehavior(type: "simpleAttractor")
             fingerAttractor.setValue("fingerAttractor", forKey: "name")
             
             let behaviors = [randomAttractor0, randomAttractor1, fingerAttractor, alphaBehavior, scaleBehavior]
@@ -211,25 +212,28 @@ public class MediaDustNode: ASDisplayNode {
         self.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.tap(_:))))
     }
     
-    @objc private func tap(_ gestureRecognizer: UITapGestureRecognizer) {
+    public func tap(at location: CGPoint) {
         guard !self.isRevealed else {
             return
         }
         
         self.tapped()
         
+        guard self.revealOnTap else {
+            return
+        }
+        
         self.isRevealed = true
         
         if self.enableAnimations {
             self.isExploding = true
             
-            let position = gestureRecognizer.location(in: self.view)
             self.emitterLayer?.setValue(true, forKeyPath: "emitterBehaviors.fingerAttractor.enabled")
-            self.emitterLayer?.setValue(position, forKeyPath: "emitterBehaviors.fingerAttractor.position")
+            self.emitterLayer?.setValue(location, forKeyPath: "emitterBehaviors.fingerAttractor.position")
             
             let maskSize = self.emitterNode.frame.size
             Queue.concurrentDefaultQueue().async {
-                let emitterMaskImage = generateMaskImage(size: maskSize, position: position, inverse: true)
+                let emitterMaskImage = generateMaskImage(size: maskSize, position: location, inverse: true)
                 
                 Queue.mainQueue().async {
                     self.emitterSpotNode.image = emitterMaskImage
@@ -237,8 +241,8 @@ public class MediaDustNode: ASDisplayNode {
             }
             
             Queue.mainQueue().after(0.1 * UIView.animationDurationFactor()) {
-                let xFactor = (position.x / self.emitterNode.frame.width - 0.5) * 2.0
-                let yFactor = (position.y / self.emitterNode.frame.height - 0.5) * 2.0
+                let xFactor = (location.x / self.emitterNode.frame.width - 0.5) * 2.0
+                let yFactor = (location.y / self.emitterNode.frame.height - 0.5) * 2.0
                 let maxFactor = max(abs(xFactor), abs(yFactor))
                 
                 let scaleAddition = maxFactor * 4.0
@@ -247,8 +251,8 @@ public class MediaDustNode: ASDisplayNode {
                 self.supernode?.view.mask = self.emitterMaskNode.view
                 self.emitterSpotNode.frame = CGRect(x: 0.0, y: 0.0, width: self.emitterMaskNode.frame.width * 3.0, height: self.emitterMaskNode.frame.height * 3.0)
                 
-                self.emitterSpotNode.layer.anchorPoint = CGPoint(x: position.x / self.emitterMaskNode.frame.width, y: position.y / self.emitterMaskNode.frame.height)
-                self.emitterSpotNode.position = position
+                self.emitterSpotNode.layer.anchorPoint = CGPoint(x: location.x / self.emitterMaskNode.frame.width, y: location.y / self.emitterMaskNode.frame.height)
+                self.emitterSpotNode.position = location
                 self.emitterSpotNode.layer.animateScale(from: 0.3333, to: 10.5 + scaleAddition, duration: 0.45 + durationAddition, removeOnCompletion: false, completion: { [weak self] _ in
                     self?.revealed()
                     self?.alpha = 0.0
@@ -271,6 +275,11 @@ public class MediaDustNode: ASDisplayNode {
                 self?.revealed()
             })
         }
+    }
+    
+    @objc private func tap(_ gestureRecognizer: UITapGestureRecognizer) {
+        let location = gestureRecognizer.location(in: self.view)
+        self.tap(at: location)
     }
         
     private var didSetupAnimations = false

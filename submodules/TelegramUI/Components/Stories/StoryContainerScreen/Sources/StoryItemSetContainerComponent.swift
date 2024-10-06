@@ -43,6 +43,7 @@ import TelegramUIPreferences
 import StoryFooterPanelComponent
 import TelegramNotices
 import SliderContextItem
+import SaveProgressScreen
 
 public final class StoryAvailableReactions: Equatable {
     let reactionItems: [ReactionItem]
@@ -77,7 +78,7 @@ public final class StoryItemSetContainerComponent: Component {
     public enum NavigationDirection {
         case previous
         case next
-        case id(Int32)
+        case id(StoryId)
     }
     
     public struct PinchState: Equatable {
@@ -118,6 +119,7 @@ public final class StoryItemSetContainerComponent: Component {
     public let navigate: (NavigationDirection) -> Void
     public let delete: () -> Void
     public let markAsSeen: (StoryId) -> Void
+    public let reorder: () -> Void
     public let controller: () -> ViewController?
     public let toggleAmbientMode: () -> Void
     public let keyboardInputData: Signal<ChatEntityKeyboardInputNode.InputData, NoError>
@@ -154,6 +156,7 @@ public final class StoryItemSetContainerComponent: Component {
         navigate: @escaping (NavigationDirection) -> Void,
         delete: @escaping () -> Void,
         markAsSeen: @escaping (StoryId) -> Void,
+        reorder: @escaping () -> Void,
         controller: @escaping () -> ViewController?,
         toggleAmbientMode: @escaping () -> Void,
         keyboardInputData: Signal<ChatEntityKeyboardInputNode.InputData, NoError>,
@@ -189,6 +192,7 @@ public final class StoryItemSetContainerComponent: Component {
         self.navigate = navigate
         self.delete = delete
         self.markAsSeen = markAsSeen
+        self.reorder = reorder
         self.controller = controller
         self.toggleAmbientMode = toggleAmbientMode
         self.keyboardInputData = keyboardInputData
@@ -335,11 +339,11 @@ public final class StoryItemSetContainerComponent: Component {
     }
     
     final class CaptionItem {
-        let itemId: Int32
+        let itemId: StoryId
         let externalState = StoryContentCaptionComponent.ExternalState()
         let view = ComponentView<Empty>()
         
-        init(itemId: Int32) {
+        init(itemId: StoryId) {
             self.itemId = itemId
         }
     }
@@ -442,7 +446,7 @@ public final class StoryItemSetContainerComponent: Component {
         
         var isSearchActive: Bool = false
         
-        var viewLists: [Int32: ViewList] = [:]
+        var viewLists: [StoryId: ViewList] = [:]
         let viewListsContainer: UIView
         
         var isEditingStory: Bool = false
@@ -450,8 +454,8 @@ public final class StoryItemSetContainerComponent: Component {
         var itemLayout: ItemLayout?
         var ignoreScrolling: Bool = false
         
-        var visibleItems: [Int32: VisibleItem] = [:]
-        var trulyValidIds: [Int32] = []
+        var visibleItems: [StoryId: VisibleItem] = [:]
+        var trulyValidIds: [StoryId] = []
         
         var reactionContextNode: ReactionContextNode?
         weak var disappearingReactionContextNode: ReactionContextNode?
@@ -477,8 +481,8 @@ public final class StoryItemSetContainerComponent: Component {
         
         let transitionCloneContainerView: UIView
         
-        private var awaitingSwitchToId: (from: Int32, to: Int32)?
-        private var animateNextNavigationId: Int32?
+        private var awaitingSwitchToId: (from: StoryId, to: StoryId)?
+        private var animateNextNavigationId: StoryId?
         private var initializedOffset: Bool = false
         
         private var viewListPanState: PanState?
@@ -647,7 +651,7 @@ public final class StoryItemSetContainerComponent: Component {
                         })
                     }
                     
-                    self.state?.updated(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                    self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                 }
             })
             
@@ -690,7 +694,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 return
                             }
                             self.sendMessageContext.hasRecordedVideoPreview = true
-                            self.state?.updated(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                            self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                         }
                         self.component?.controller()?.present(videoRecorder, in: .window(.root))
                         
@@ -703,7 +707,7 @@ public final class StoryItemSetContainerComponent: Component {
                         let _ = previousVideoRecorderValue.dismissVideo()
                     }
                     
-                    self.state?.updated(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                    self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                 }
             })
         }
@@ -731,7 +735,7 @@ public final class StoryItemSetContainerComponent: Component {
             guard let component = self.component else {
                 return false
             }
-            guard let visibleItem = self.visibleItems[component.slice.item.storyItem.id] else {
+            guard let visibleItem = self.visibleItems[component.slice.item.id] else {
                 return false
             }
             guard let itemView = visibleItem.view.view as? StoryItemContentComponent.View else {
@@ -825,7 +829,7 @@ public final class StoryItemSetContainerComponent: Component {
             guard let component = self.component else {
                 return
             }
-            guard let visibleItem = self.visibleItems[component.slice.item.storyItem.id] else {
+            guard let visibleItem = self.visibleItems[component.slice.item.id] else {
                 return
             }
             if let itemView = visibleItem.view.view as? StoryContentItem.View {
@@ -837,7 +841,7 @@ public final class StoryItemSetContainerComponent: Component {
             guard let component = self.component else {
                 return
             }
-            guard let visibleItem = self.visibleItems[component.slice.item.storyItem.id] else {
+            guard let visibleItem = self.visibleItems[component.slice.item.id] else {
                 return
             }
             if let itemView = visibleItem.view.view as? StoryContentItem.View {
@@ -851,7 +855,7 @@ public final class StoryItemSetContainerComponent: Component {
             guard let component = self.component else {
                 return
             }
-            guard let visibleItem = self.visibleItems[component.slice.item.storyItem.id] else {
+            guard let visibleItem = self.visibleItems[component.slice.item.id] else {
                 return
             }
             if let itemView = visibleItem.view.view as? StoryContentItem.View {
@@ -878,7 +882,7 @@ public final class StoryItemSetContainerComponent: Component {
                     if otherGestureRecognizer.view is UIScrollView {
                         return true
                     }
-                    if let component = self.component, let viewList = self.viewLists[component.slice.item.storyItem.id], let viewListView = viewList.view.view as? StoryItemSetViewListComponent.View {
+                    if let component = self.component, let viewList = self.viewLists[component.slice.item.id], let viewListView = viewList.view.view as? StoryItemSetViewListComponent.View {
                         if otherGestureRecognizer.view === viewListView {
                             return true
                         }
@@ -913,9 +917,6 @@ public final class StoryItemSetContainerComponent: Component {
         @objc private func tapGesture(_ recognizer: UITapGestureRecognizer) {
             if case .ended = recognizer.state, let component = self.component, let itemLayout = self.itemLayout {
                 
-                if let _ = self.sendMessageContext.menuController {
-                    return
-                }
                 if self.displayLikeReactions {
                     self.displayLikeReactions = false
                     self.sendMessageContext.currentInputMode = .text
@@ -925,7 +926,7 @@ public final class StoryItemSetContainerComponent: Component {
                         self.endEditing(true)
                     }
                     
-                    self.state?.updated(transition: Transition(animation: .curve(duration: 0.25, curve: .easeInOut)))
+                    self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)))
                     self.updateIsProgressPaused()
                 } else if self.hasActiveDeactivateableInput() {
                     Queue.mainQueue().justDispatch {
@@ -936,8 +937,8 @@ public final class StoryItemSetContainerComponent: Component {
                     
                     for (id, visibleItem) in self.visibleItems {
                         if visibleItem.contentContainerView.convert(visibleItem.contentContainerView.bounds, to: self).contains(point) {
-                            if id == component.slice.item.storyItem.id {
-                                let transition = Transition(animation: .curve(duration: 0.4, curve: .spring))
+                            if id == component.slice.item.id {
+                                let transition = ComponentTransition(animation: .curve(duration: 0.4, curve: .spring))
                                 
                                 self.viewListDisplayState = .hidden
                                 self.isSearchActive = false
@@ -956,7 +957,7 @@ public final class StoryItemSetContainerComponent: Component {
                         if captionItem.externalState.isSelectingText {
                             captionItemView.cancelTextSelection()
                         } else {
-                            captionItemView.collapse(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                            captionItemView.collapse(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                         }
                     }
                 } else {
@@ -1035,22 +1036,22 @@ public final class StoryItemSetContainerComponent: Component {
                     let velocity = recognizer.velocity(in: self)
                     
                     var consumed = false
-                    if let component = self.component, let currentIndex = component.slice.allItems.firstIndex(where: { $0.storyItem.id == component.slice.item.storyItem.id }) {
+                    if let component = self.component, let currentIndex = component.slice.allItems.firstIndex(where: { $0.id == component.slice.item.id }) {
                         if (viewListPanState.fraction <= -0.3 || (viewListPanState.fraction <= -0.05 && velocity.x <= -200.0)), currentIndex != component.slice.allItems.count - 1 {
                             let nextItem = component.slice.allItems[currentIndex + 1]
-                            self.animateNextNavigationId = nextItem.storyItem.id
-                            component.navigate(.id(nextItem.storyItem.id))
+                            self.animateNextNavigationId = nextItem.id
+                            component.navigate(.id(nextItem.id))
                             consumed = true
                         } else if (viewListPanState.fraction >= 0.3 || (viewListPanState.fraction >= 0.05 && velocity.x >= 200.0)), currentIndex != 0 {
                             let previousItem = component.slice.allItems[currentIndex - 1]
-                            self.animateNextNavigationId = previousItem.storyItem.id
-                            component.navigate(.id(previousItem.storyItem.id))
+                            self.animateNextNavigationId = previousItem.id
+                            component.navigate(.id(previousItem.id))
                             consumed = true
                         }
                     }
                     
                     if !consumed {
-                        let transition = Transition(animation: .curve(duration: 0.4, curve: .spring))
+                        let transition = ComponentTransition(animation: .curve(duration: 0.4, curve: .spring))
                         self.viewListPanState = nil
                         self.isCompletingViewListPan = true
                         transition.attachAnimation(view: self, id: "isCompletingViewListPan", completion: { [weak self] completed in
@@ -1083,7 +1084,7 @@ public final class StoryItemSetContainerComponent: Component {
                     verticalPanState.fraction = fraction
                 } else {
                     var targetScrollView: UIScrollView?
-                    if case .began = recognizer.state, self.viewListDisplayState != .hidden, let viewList = self.viewLists[component.slice.item.storyItem.id], let viewListView = viewList.view.view as? StoryItemSetViewListComponent.View {
+                    if case .began = recognizer.state, self.viewListDisplayState != .hidden, let viewList = self.viewLists[component.slice.item.id], let viewListView = viewList.view.view as? StoryItemSetViewListComponent.View {
                         if let hitResult = viewListView.hitTest(self.convert(recognizer.location(in: self), to: viewListView), with: nil) {
                             func findTargetScrollView(target: UIView, minParent: UIView) -> UIScrollView? {
                                 if target === viewListView {
@@ -1148,7 +1149,7 @@ public final class StoryItemSetContainerComponent: Component {
                         if verticalPanState.accumulatedOffset > 0.0 || resetContentOffset {
                             scrollView.contentOffset = CGPoint()
                             
-                            if self.viewListDisplayState != .hidden, let viewList = self.viewLists[component.slice.item.storyItem.id], let viewListView = viewList.view.view as? StoryItemSetViewListComponent.View {
+                            if self.viewListDisplayState != .hidden, let viewList = self.viewLists[component.slice.item.id], let viewListView = viewList.view.view as? StoryItemSetViewListComponent.View {
                                 let eventCycleState = StoryItemSetViewListComponent.EventCycleState()
                                 eventCycleState.ignoreScrolling = true
                                 viewListView.setEventCycleState(eventCycleState)
@@ -1196,16 +1197,16 @@ public final class StoryItemSetContainerComponent: Component {
                                     }
                                 }
                                 
-                                self.state?.updated(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                                self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                             } else if verticalPanState.accumulatedOffset < 0.0 && self.targetViewListDisplayStateIsFull {
                                 if verticalPanState.fraction <= -0.05 || velocity.y <= -80.0 {
                                     self.viewListDisplayState = .full
                                 } else {
                                     self.viewListDisplayState = .half
                                 }
-                                self.state?.updated(transition: verticalPanState.accumulatedOffset == 0.0 ? .immediate : Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                                self.state?.updated(transition: verticalPanState.accumulatedOffset == 0.0 ? .immediate : ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                             } else {
-                                self.state?.updated(transition: verticalPanState.accumulatedOffset == 0.0 ? .immediate : Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                                self.state?.updated(transition: verticalPanState.accumulatedOffset == 0.0 ? .immediate : ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                             }
                         } else {
                             if verticalPanState.fraction >= 0.3 || (verticalPanState.fraction >= 0.05 && velocity.y >= 150.0) {
@@ -1220,36 +1221,36 @@ public final class StoryItemSetContainerComponent: Component {
                                 self.dismissAllTooltips()
                             }
                             
-                            self.state?.updated(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                            self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                         }
                     } else {
-                        if let visibleItemView = self.visibleItems[component.slice.item.storyItem.id]?.view.view as? StoryItemContentComponent.View  {
+                        if let visibleItemView = self.visibleItems[component.slice.item.id]?.view.view as? StoryItemContentComponent.View  {
                             visibleItemView.seekEnded()
                         }
                         if translation.y > 200.0 || (translation.y > 5.0 && velocity.y > 200.0) {
-                            self.state?.updated(transition: Transition(animation: .curve(duration: 0.3, curve: .spring)))
+                            self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.3, curve: .spring)))
                             self.component?.controller()?.dismiss()
                         } else if translation.y < -200.0 || (translation.y < -100.0 && velocity.y < -100.0) {
                             var displayViewLists = false
-                            if component.slice.peer.id == component.context.account.peerId {
+                            if component.slice.effectivePeer.id == component.context.account.peerId {
                                 displayViewLists = true
-                            } else if case let .channel(channel) = component.slice.peer, channel.flags.contains(.isCreator) || component.slice.additionalPeerData.canViewStats {
+                            } else if case let .channel(channel) = component.slice.effectivePeer, channel.flags.contains(.isCreator) || component.slice.additionalPeerData.canViewStats {
                                 displayViewLists = true
                             }
                             
                             if displayViewLists {
                                 self.viewListDisplayState = self.targetViewListDisplayStateIsFull ? .full : .half
-                                self.state?.updated(transition: Transition(animation: .curve(duration: 0.3, curve: .spring)))
+                                self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.3, curve: .spring)))
                                 self.dismissAllTooltips()
                             } else {
-                                self.state?.updated(transition: Transition(animation: .curve(duration: 0.3, curve: .spring)))
+                                self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.3, curve: .spring)))
                                 
                                 if let activate = self.activateInputWhileDragging() {
                                     activate()
                                 }
                             }
                         } else {
-                            self.state?.updated(transition: Transition(animation: .curve(duration: 0.3, curve: .spring)))
+                            self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.3, curve: .spring)))
                         }
                     }
                 }
@@ -1266,7 +1267,7 @@ public final class StoryItemSetContainerComponent: Component {
             if self.viewListDisplayState != .hidden {
                 self.viewListDisplayState = .hidden
                 self.isSearchActive = false
-                self.state?.updated(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
             } else {
                 component.close()
             }
@@ -1311,10 +1312,9 @@ public final class StoryItemSetContainerComponent: Component {
                     var index = Int(round(scrollView.contentOffset.x / itemLayout.fullItemScrollDistance))
                     index = max(0, min(index, component.slice.allItems.count - 1))
                     
-                    if let currentIndex = component.slice.allItems.firstIndex(where: { $0.storyItem.id == component.slice.item.storyItem.id }) {
+                    if let currentIndex = component.slice.allItems.firstIndex(where: { $0.id == component.slice.item.id }) {
                         if index != currentIndex {
-                            let nextId = component.slice.allItems[index].storyItem.id
-                            //self.awaitingSwitchToId = (component.slice.allItems[currentIndex].storyItem.id, nextId)
+                            let nextId = component.slice.allItems[index].id
                             component.navigate(.id(nextId))
                         }
                     }
@@ -1419,7 +1419,7 @@ public final class StoryItemSetContainerComponent: Component {
             return .play
         }
         
-        private func updateScrolling(transition: Transition) {
+        private func updateScrolling(transition: ComponentTransition) {
             guard let component = self.component, let itemLayout = self.itemLayout else {
                 return
             }
@@ -1429,8 +1429,8 @@ public final class StoryItemSetContainerComponent: Component {
                 hintAllowSynchronousLoads = hint.allowSynchronousLoads
             }
             
-            var validIds: [Int32] = []
-            var trulyValidIds: [Int32] = []
+            var validIds: [StoryId] = []
+            var trulyValidIds: [StoryId] = []
             
             let centralItemX = itemLayout.contentFrame.center.x
             
@@ -1440,7 +1440,7 @@ public final class StoryItemSetContainerComponent: Component {
             let scaledFullItemScrollDistance = scaledCentralVisibleItemWidth * 0.5 + itemLayout.itemSpacing + scaledSideVisibleItemWidth * 0.5
             let scaledHalfItemScrollDistance = scaledSideVisibleItemWidth * 0.5 + itemLayout.itemSpacing + scaledSideVisibleItemWidth * 0.5
             
-            if let centralIndex = component.slice.allItems.firstIndex(where: { $0.storyItem.id == component.slice.item.storyItem.id }) {
+            if let centralIndex = component.slice.allItems.firstIndex(where: { $0.id == component.slice.item.id }) {
                 let centralItemOffset: CGFloat = itemLayout.fullItemScrollDistance * CGFloat(centralIndex)
                 let effectiveScrollingOffsetX = self.scroller.contentOffset.x * itemLayout.contentScaleFraction + centralItemOffset * (1.0 - itemLayout.contentScaleFraction)
                 
@@ -1487,7 +1487,7 @@ public final class StoryItemSetContainerComponent: Component {
                         if transition.animation.isImmediate {
                             continue
                         } else {
-                            if self.visibleItems[item.storyItem.id] == nil {
+                            if self.visibleItems[item.id] == nil {
                                 continue
                             } else {
                                 reevaluateVisibilityOnCompletion = true
@@ -1500,19 +1500,19 @@ public final class StoryItemSetContainerComponent: Component {
                     let minItemScale = itemLayout.contentMinScale * (1.0 - scaleFraction) + itemLayout.sideVisibleItemScale * scaleFraction
                     let itemScale: CGFloat = itemLayout.contentScaleFraction * minItemScale + (1.0 - itemLayout.contentScaleFraction) * 1.0
                     
-                    validIds.append(item.storyItem.id)
+                    validIds.append(item.id)
                     if itemVisible {
-                        trulyValidIds.append(item.storyItem.id)
+                        trulyValidIds.append(item.id)
                     }
                     
                     var itemTransition = transition
                     let visibleItem: VisibleItem
-                    if let current = self.visibleItems[item.storyItem.id] {
+                    if let current = self.visibleItems[item.id] {
                         visibleItem = current
                     } else {
                         itemTransition = .immediate
                         visibleItem = VisibleItem()
-                        self.visibleItems[item.storyItem.id] = visibleItem
+                        self.visibleItems[item.id] = visibleItem
                     }
                     
                     let itemEnvironment = StoryContentItem.Environment(
@@ -1563,7 +1563,7 @@ public final class StoryItemSetContainerComponent: Component {
                         component: AnyComponent(StoryItemContentComponent(
                             context: component.context,
                             strings: component.strings,
-                            peer: component.slice.peer,
+                            peer: component.slice.effectivePeer,
                             item: item.storyItem,
                             availableReactions: component.availableReactions,
                             entityFiles: item.entityFiles,
@@ -1595,7 +1595,7 @@ public final class StoryItemSetContainerComponent: Component {
                         itemTransition.setPosition(view: view, position: CGPoint(x: itemLayout.contentFrame.size.width * 0.5, y: itemLayout.contentFrame.size.height * 0.5))
                         itemTransition.setBounds(view: view, bounds: CGRect(origin: CGPoint(), size: itemLayout.contentFrame.size))
                         
-                        let itemId = item.storyItem.id
+                        let itemId = item.id
                         itemTransition.setPosition(view: visibleItem.contentContainerView, position: CGPoint(x: itemPositionX, y: itemLayout.contentFrame.center.y), completion: { [weak self] _ in
                             guard reevaluateVisibilityOnCompletion, let self else {
                                 return
@@ -1661,7 +1661,8 @@ public final class StoryItemSetContainerComponent: Component {
                         var isChannel = false
                         var canShare = true
                         var displayFooter = false
-                        if case let .channel(channel) = component.slice.peer {
+                        var displayFooterViews = true
+                        if case let .channel(channel) = component.slice.effectivePeer {
                             isChannel = true
                             if channel.addressName == nil {
                                 canShare = false
@@ -1678,10 +1679,13 @@ public final class StoryItemSetContainerComponent: Component {
                                     displayFooter = true
                                 }
                             }
-                        } else if component.slice.peer.id == component.context.account.peerId {
+                        } else if component.slice.effectivePeer.id == component.context.account.peerId {
                             displayFooter = true
                         } else if component.slice.item.storyItem.isPending {
                             displayFooter = true
+                        } else if case let .user(user) = component.slice.peer, let botInfo = user.botInfo, botInfo.flags.contains(.canEdit) {
+                            displayFooter = true
+                            displayFooterViews = false
                         }
                         if component.slice.item.storyItem.isForwardingDisabled {
                             canShare = false
@@ -1723,7 +1727,7 @@ public final class StoryItemSetContainerComponent: Component {
                                     context: component.context,
                                     theme: component.theme,
                                     strings: component.strings,
-                                    peer: component.slice.peer,
+                                    peer: component.slice.effectivePeer,
                                     storyItem: item.storyItem,
                                     myReaction: item.storyItem.myReaction.flatMap { value -> StoryFooterPanelComponent.MyReaction? in
                                         var centerAnimation: TelegramMediaFile?
@@ -1741,6 +1745,15 @@ public final class StoryItemSetContainerComponent: Component {
                                             }
                                         case let .custom(fileId):
                                             animationFileId = fileId
+                                        case .stars:
+                                            if let availableReactions = component.availableReactions {
+                                                for availableReaction in availableReactions.reactionItems {
+                                                    if availableReaction.reaction.rawValue == value {
+                                                        centerAnimation = availableReaction.listAnimation
+                                                        break
+                                                    }
+                                                }
+                                            }
                                         }
                                         
                                         if animationFileId == nil && centerAnimation == nil {
@@ -1753,12 +1766,13 @@ public final class StoryItemSetContainerComponent: Component {
                                     canViewChannelStats: component.slice.additionalPeerData.canViewStats,
                                     canShare: canShare,
                                     externalViews: nil,
+                                    displayViews: displayFooterViews,
                                     expandFraction: footerExpandFraction,
                                     expandViewStats: { [weak self] in
                                         guard let self, let component = self.component else {
                                             return
                                         }
-                                        if self.viewLists[component.slice.item.storyItem.id] == nil {
+                                        if self.viewLists[component.slice.item.id] == nil {
                                             return
                                         }
                                         
@@ -1769,48 +1783,17 @@ public final class StoryItemSetContainerComponent: Component {
                                             self.updateScrolling(transition: .immediate)
                                             self.preparingToDisplayViewList = false
                                             
-                                            self.state?.updated(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                                            self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                                             
                                             self.dismissAllTooltips()
                                         }
                                     },
                                     deleteAction: { [weak self] in
-                                        guard let self, let component = self.component else {
+                                        guard let self else {
                                             return
                                         }
                                         
-                                        let presentationData = component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme)
-                                        let actionSheet = ActionSheetController(presentationData: presentationData)
-                                        
-                                        actionSheet.setItemGroups([
-                                            ActionSheetItemGroup(items: [
-                                                ActionSheetButtonItem(title: component.strings.Story_ContextDeleteStory, color: .destructive, action: { [weak self, weak actionSheet] in
-                                                    actionSheet?.dismissAnimated()
-                                                    
-                                                    guard let self, let component = self.component else {
-                                                        return
-                                                    }
-                                                    component.delete()
-                                                })
-                                            ]),
-                                            ActionSheetItemGroup(items: [
-                                                ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
-                                                    actionSheet?.dismissAnimated()
-                                                })
-                                            ])
-                                        ])
-                                        
-                                        actionSheet.dismissed = { [weak self] _ in
-                                            guard let self else {
-                                                return
-                                            }
-                                            self.sendMessageContext.actionSheet = nil
-                                            self.updateIsProgressPaused()
-                                        }
-                                        self.sendMessageContext.actionSheet = actionSheet
-                                        self.updateIsProgressPaused()
-                                        
-                                        component.presentController(actionSheet, nil)
+                                        self.performDeleteAction()
                                     },
                                     moreAction: { [weak self] sourceView, gesture in
                                         guard let self else {
@@ -1889,7 +1872,7 @@ public final class StoryItemSetContainerComponent: Component {
             
             self.trulyValidIds = trulyValidIds
             
-            var removeIds: [Int32] = []
+            var removeIds: [StoryId] = []
             for (id, visibleItem) in self.visibleItems {
                 if !validIds.contains(id) {
                     removeIds.append(id)
@@ -1907,9 +1890,9 @@ public final class StoryItemSetContainerComponent: Component {
         
         func updateIsProgressPaused() {
             let progressMode = self.itemProgressMode()
-            var centralId: Int32?
+            var centralId: StoryId?
             if let component = self.component {
-                centralId = component.slice.item.storyItem.id
+                centralId = component.slice.item.id
             }
             
             for (id, visibleItem) in self.visibleItems {
@@ -1931,27 +1914,27 @@ public final class StoryItemSetContainerComponent: Component {
             }
             
             var displayViewLists = false
-            if component.slice.peer.id == component.context.account.peerId {
+            if component.slice.effectivePeer.id == component.context.account.peerId {
                 displayViewLists = true
-            } else if case let .channel(channel) = component.slice.peer, channel.flags.contains(.isCreator) || component.slice.additionalPeerData.canViewStats {
+            } else if case let .channel(channel) = component.slice.effectivePeer, channel.flags.contains(.isCreator) || component.slice.additionalPeerData.canViewStats {
                 displayViewLists = true
             }
             
             if displayViewLists {
                 self.viewListDisplayState = .half
-                self.state?.updated(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                 
                 self.dismissAllTooltips()
                 
                 return true
             } else {
                 var canReply = false
-                if case .user = component.slice.peer {
+                if case .user = component.slice.effectivePeer {
                     canReply = true
                     
-                    if component.slice.peer.id == component.context.account.peerId {
+                    if component.slice.effectivePeer.id == component.context.account.peerId {
                         canReply = false
-                    } else if component.slice.peer.isService {
+                    } else if component.slice.effectivePeer.isService {
                         canReply = false
                     } else if case .unsupported = component.slice.item.storyItem.media {
                         canReply = false
@@ -1974,12 +1957,12 @@ public final class StoryItemSetContainerComponent: Component {
             }
             
             var canReply = false
-            if case .user = component.slice.peer {
+            if case .user = component.slice.effectivePeer {
                 canReply = true
                 
-                if component.slice.peer.id == component.context.account.peerId {
+                if component.slice.effectivePeer.id == component.context.account.peerId {
                     canReply = false
-                } else if component.slice.peer.isService {
+                } else if component.slice.effectivePeer.isService {
                     canReply = false
                 } else if case .unsupported = component.slice.item.storyItem.media {
                     canReply = false
@@ -1995,7 +1978,7 @@ public final class StoryItemSetContainerComponent: Component {
                         
                         if self.displayLikeReactions {
                             self.displayLikeReactions = false
-                            self.state?.updated(transition: Transition(animation: .curve(duration: 0.25, curve: .easeInOut)))
+                            self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)))
                         }
                         
                         inputPanelView.activateInput()
@@ -2040,7 +2023,7 @@ public final class StoryItemSetContainerComponent: Component {
                 captionItemView.layer.animateAlpha(from: 0.0, to: captionItemView.alpha, duration: 0.28)
             }
             
-            if let component = self.component, let sourceView = transitionIn.sourceView, let visibleItem = self.visibleItems[component.slice.item.storyItem.id] {
+            if let component = self.component, let sourceView = transitionIn.sourceView, let visibleItem = self.visibleItems[component.slice.item.id] {
                 let contentContainerView = visibleItem.contentContainerView
                 let unclippedContainerView = visibleItem.unclippedContainerView
                 
@@ -2116,7 +2099,7 @@ public final class StoryItemSetContainerComponent: Component {
                 self.controlsNavigationClippingView.layer.animatePosition(from: sourceLocalFrame.center, to: self.controlsNavigationClippingView.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
                 self.controlsNavigationClippingView.layer.animateBounds(from: CGRect(origin: CGPoint(x: innerSourceLocalFrame.minX, y: innerSourceLocalFrame.minY), size: sourceLocalFrame.size), to: self.controlsNavigationClippingView.bounds, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
                 
-                if let component = self.component, let visibleItemView = self.visibleItems[component.slice.item.storyItem.id]?.view.view {
+                if let component = self.component, let visibleItemView = self.visibleItems[component.slice.item.id]?.view.view {
                     let innerScale = innerSourceLocalFrame.width / visibleItemView.bounds.width
                     let innerFromFrame = CGRect(origin: CGPoint(x: innerSourceLocalFrame.minX, y: innerSourceLocalFrame.minY), size: CGSize(width: innerSourceLocalFrame.width, height: visibleItemView.bounds.height * innerScale))
                     
@@ -2224,7 +2207,7 @@ public final class StoryItemSetContainerComponent: Component {
                 })
             }
             
-            if let component = self.component, let sourceView = transitionOut.destinationView, let visibleItem = self.visibleItems[component.slice.item.storyItem.id] {
+            if let component = self.component, let sourceView = transitionOut.destinationView, let visibleItem = self.visibleItems[component.slice.item.id] {
                 if let footerPanelView = visibleItem.footerPanel?.view {
                     footerPanelView.layer.animatePosition(
                         from: CGPoint(),
@@ -2315,7 +2298,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 ), .immediate)
                             }
                             
-                            let transition = Transition(animation: .curve(duration: 0.3, curve: .spring))
+                            let transition = ComponentTransition(animation: .curve(duration: 0.3, curve: .spring))
                             
                             for transitionViewImpl in transitionViewsImpl {
                                 transitionViewImpl.alpha = 1.0
@@ -2438,7 +2421,7 @@ public final class StoryItemSetContainerComponent: Component {
                             ), .immediate)
                         }
                         
-                        let transition = Transition(animation: .curve(duration: 0.3, curve: .spring))
+                        let transition = ComponentTransition(animation: .curve(duration: 0.3, curve: .spring))
                         
                         for transitionViewImpl in transitionViewsImpl {
                             transitionViewImpl.alpha = 1.0
@@ -2461,7 +2444,7 @@ public final class StoryItemSetContainerComponent: Component {
                     }
                 }
                 
-                if let component = self.component, let visibleItemView = self.visibleItems[component.slice.item.storyItem.id]?.view.view {
+                if let component = self.component, let visibleItemView = self.visibleItems[component.slice.item.id]?.view.view {
                     let innerScale = innerSourceLocalFrame.width / visibleItemView.bounds.width
                     
                     var adjustedInnerSourceLocalFrame = innerSourceLocalFrame
@@ -2515,7 +2498,7 @@ public final class StoryItemSetContainerComponent: Component {
             if likeButtonView.alpha == 0.0 {
                 return
             }
-            if component.slice.peer.isService {
+            if component.slice.effectivePeer.isService {
                 return
             } else if case .unsupported = component.slice.item.storyItem.media {
                 return
@@ -2558,12 +2541,12 @@ public final class StoryItemSetContainerComponent: Component {
                 let previousInput = inputPanelView.getSendMessageInput()
                 switch previousInput {
                 case let .text(value):
-                    component.storyItemSharedState.replyDrafts[StoryId(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id)] = value
+                    component.storyItemSharedState.replyDrafts[component.slice.item.id] = value
                 }
             }
         }
         
-        func update(component: StoryItemSetContainerComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        func update(component: StoryItemSetContainerComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.isUpdatingComponent = true
             defer {
                 self.isUpdatingComponent = false
@@ -2600,7 +2583,7 @@ public final class StoryItemSetContainerComponent: Component {
             var isFirstItem = false
             var itemChanged = false
             var resetInputContents: MessageInputPanelComponent.SendMessageInput?
-            if self.component?.slice.item.storyItem.id != component.slice.item.storyItem.id {
+            if self.component?.slice.item.id != component.slice.item.id {
                 isFirstItem = self.component == nil
                 itemChanged = self.component != nil
                 self.initializedOffset = false
@@ -2608,10 +2591,10 @@ public final class StoryItemSetContainerComponent: Component {
                 resetInputContents = .text(NSAttributedString())
                 
                 self.saveDraft()
-                if let draft = component.storyItemSharedState.replyDrafts[StoryId(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id)] {
+                if let draft = component.storyItemSharedState.replyDrafts[component.slice.item.id] {
                     resetInputContents = .text(draft)
                 }
-                component.storyItemSharedState.replyDrafts.removeValue(forKey: StoryId(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id))
+                component.storyItemSharedState.replyDrafts.removeValue(forKey: component.slice.item.id)
                 
                 if let tooltipScreen = self.sendMessageContext.tooltipScreen {
                     if let tooltipScreen = tooltipScreen as? UndoOverlayController, let tag = tooltipScreen.tag as? String, tag == "no_auto_dismiss" {
@@ -2628,7 +2611,7 @@ public final class StoryItemSetContainerComponent: Component {
                 if let reactionContextNode = self.reactionContextNode {
                     self.reactionContextNode = nil
                     
-                    let reactionTransition = Transition.immediate
+                    let reactionTransition = ComponentTransition.immediate
                     reactionTransition.setAlpha(view: reactionContextNode.view, alpha: 0.0, completion: { [weak reactionContextNode] _ in
                         reactionContextNode?.view.removeFromSuperview()
                     })
@@ -2640,7 +2623,7 @@ public final class StoryItemSetContainerComponent: Component {
             }
             var itemsTransition = transition
             var resetScrollingOffsetWithItemTransition = false
-            if let animateNextNavigationId = self.animateNextNavigationId, animateNextNavigationId == component.slice.item.storyItem.id {
+            if let animateNextNavigationId = self.animateNextNavigationId, animateNextNavigationId == component.slice.item.id {
                 self.animateNextNavigationId = nil
                 self.viewListPanState = nil
                 self.isCompletingViewListPan = true
@@ -2657,7 +2640,7 @@ public final class StoryItemSetContainerComponent: Component {
                 resetScrollingOffsetWithItemTransition = true
             }
             
-            if let awaitingSwitchToId = self.awaitingSwitchToId, awaitingSwitchToId.to == component.slice.item.storyItem.id {
+            if let awaitingSwitchToId = self.awaitingSwitchToId, awaitingSwitchToId.to == component.slice.item.id {
                 self.awaitingSwitchToId = nil
                 self.viewListPanState = nil
                 self.isCompletingViewListPan = true
@@ -2761,7 +2744,7 @@ public final class StoryItemSetContainerComponent: Component {
             var isGroup = false
             var showMessageInputPanel = true
             var isGroupCommentRestricted = false
-            if case let .channel(channel) = component.slice.peer {
+            if case let .channel(channel) = component.slice.effectivePeer {
                 switch channel.info {
                 case .broadcast:
                     isChannel = true
@@ -2777,7 +2760,10 @@ public final class StoryItemSetContainerComponent: Component {
                     isGroup = true
                 }
             } else {
-                showMessageInputPanel = component.slice.peer.id != component.context.account.peerId
+                showMessageInputPanel = component.slice.effectivePeer.id != component.context.account.peerId
+            }
+            if case let .user(user) = component.slice.peer, let _ = user.botInfo {
+                showMessageInputPanel = false
             }
             
             var isUnsupported = false
@@ -2788,10 +2774,10 @@ public final class StoryItemSetContainerComponent: Component {
                     self?.presentBoostToUnrestrict()
                 })
             } else if component.slice.additionalPeerData.isPremiumRequiredForMessaging {
-                disabledPlaceholder = .premiumRequired(title: component.strings.Story_MessagingRestrictedPlaceholder(component.slice.peer.compactDisplayTitle).string, subtitle: component.strings.Story_MessagingRestrictedPlaceholderAction, action: { [weak self] in
+                disabledPlaceholder = .premiumRequired(title: component.strings.Story_MessagingRestrictedPlaceholder(component.slice.effectivePeer.compactDisplayTitle).string, subtitle: component.strings.Story_MessagingRestrictedPlaceholderAction, action: { [weak self] in
                     self?.presentPremiumRequiredForMessaging()
                 })
-            } else if component.slice.peer.isService {
+            } else if component.slice.effectivePeer.isService {
                 disabledPlaceholder = .text(component.strings.Story_FooterReplyUnavailable)
             } else if case .unsupported = component.slice.item.storyItem.media {
                 isUnsupported = true
@@ -2860,10 +2846,10 @@ public final class StoryItemSetContainerComponent: Component {
                         
             if showMessageInputPanel {
                 var haveLikeOptions = false
-                if case .user = component.slice.peer {
+                if case .user = component.slice.effectivePeer {
                     haveLikeOptions = true
                     
-                    if component.slice.peer.isService {
+                    if component.slice.effectivePeer.isService {
                         haveLikeOptions = false
                     }
                 }
@@ -2930,7 +2916,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 return
                             }
                             self.sendMessageContext.lockMediaRecording()
-                            self.state?.updated(transition: Transition(animation: .curve(duration: 0.3, curve: .spring)))
+                            self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.3, curve: .spring)))
                         },
                         stopAndPreviewMediaRecording: { [weak self] in
                             guard let self else {
@@ -2945,7 +2931,7 @@ public final class StoryItemSetContainerComponent: Component {
                             self.sendMessageContext.videoRecorderValue?.dismissVideo()
                             self.sendMessageContext.discardMediaRecordingPreview(view: self)
                         },
-                        attachmentAction: component.slice.peer.isService ? nil : { [weak self] in
+                        attachmentAction: component.slice.effectivePeer.isService ? nil : { [weak self] in
                             guard let self else {
                                 return
                             }
@@ -2967,6 +2953,15 @@ public final class StoryItemSetContainerComponent: Component {
                                 }
                             case let .custom(fileId):
                                 animationFileId = fileId
+                            case .stars:
+                                if let availableReactions = component.availableReactions {
+                                    for availableReaction in availableReactions.reactionItems {
+                                        if availableReaction.reaction.rawValue == value {
+                                            centerAnimation = availableReaction.listAnimation
+                                            break
+                                        }
+                                    }
+                                }
                             }
                             
                             if animationFileId == nil && centerAnimation == nil {
@@ -2975,7 +2970,7 @@ public final class StoryItemSetContainerComponent: Component {
                             
                             return MessageInputPanelComponent.MyReaction(reaction: value, file: centerAnimation, animationFileId: animationFileId)
                         },
-                        likeAction: component.slice.peer.isService ? nil : { [weak self] in
+                        likeAction: component.slice.effectivePeer.isService ? nil : { [weak self] in
                             guard let self else {
                                 return
                             }
@@ -3018,12 +3013,12 @@ public final class StoryItemSetContainerComponent: Component {
                             }
                             let rect = view.convert(view.bounds, to: nil)
                             let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }
-                            let text = presentationData.strings.Conversation_VoiceMessagesRestricted(component.slice.peer.compactDisplayTitle).string
+                            let text = presentationData.strings.Conversation_VoiceMessagesRestricted(component.slice.effectivePeer.compactDisplayTitle).string
                             let controller = TooltipController(content: .text(text), baseFontSize: presentationData.listsFontSize.baseDisplaySize, isBlurred: true, padding: 2.0)
                             controller.dismissed = { [weak self] _ in
                                 if let self {
                                     self.voiceMessagesRestrictedTooltipController = nil
-                                    self.state?.updated(transition: Transition(animation: .curve(duration: 0.2, curve: .easeInOut)))
+                                    self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut)))
                                 }
                             }
                             component.presentController(controller, TooltipControllerPresentationArguments(sourceViewAndRect: { [weak self] in
@@ -3033,7 +3028,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 return nil
                             }))
                             self.voiceMessagesRestrictedTooltipController = controller
-                            self.state?.updated(transition: Transition(animation: .curve(duration: 0.2, curve: .easeInOut)))
+                            self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut)))
                         },
                         presentTextLengthLimitTooltip: nil,
                         presentTextFormattingTooltip: nil,
@@ -3173,52 +3168,52 @@ public final class StoryItemSetContainerComponent: Component {
             
             let startTime4 = CFAbsoluteTimeGetCurrent()
             
-            var validViewListIds: [Int32] = []
+            var validViewListIds: [StoryId] = []
             
             var displayViewLists = false
-            if component.slice.peer.id == component.context.account.peerId {
+            if component.slice.effectivePeer.id == component.context.account.peerId {
                 displayViewLists = true
-            } else if case let .channel(channel) = component.slice.peer, channel.flags.contains(.isCreator) || component.slice.additionalPeerData.canViewStats {
+            } else if case let .channel(channel) = component.slice.effectivePeer, channel.flags.contains(.isCreator) || component.slice.additionalPeerData.canViewStats {
                 displayViewLists = true
             }
             
             var viewListHeightMidFraction: CGFloat = 0.0
-            if displayViewLists, let currentIndex = component.slice.allItems.firstIndex(where: { $0.storyItem.id == component.slice.item.storyItem.id }) {
-                var visibleViewListIds: [Int32] = [component.slice.item.storyItem.id]
+            if displayViewLists, let currentIndex = component.slice.allItems.firstIndex(where: { $0.id == component.slice.item.id }) {
+                var visibleViewListIds: [StoryId] = [component.slice.item.id]
                 if self.viewListDisplayState != .hidden, let viewListPanState = self.viewListPanState {
                     if currentIndex != 0 {
                         if viewListPanState.fraction > 0.0 {
-                            visibleViewListIds.append(component.slice.allItems[currentIndex - 1].storyItem.id)
+                            visibleViewListIds.append(component.slice.allItems[currentIndex - 1].id)
                         }
                     }
                     if currentIndex != component.slice.allItems.count - 1 {
                         if viewListPanState.fraction < 0.0 {
-                            visibleViewListIds.append(component.slice.allItems[currentIndex + 1].storyItem.id)
+                            visibleViewListIds.append(component.slice.allItems[currentIndex + 1].id)
                         }
                     }
                 }
                 
-                var preloadViewListIds: [(Int32, EngineStoryItem.Views)] = []
+                var preloadViewListIds: [(StoryId, EngineStoryItem.Views)] = []
                 if let views = component.slice.item.storyItem.views {
-                    preloadViewListIds.append((component.slice.item.storyItem.id, views))
+                    preloadViewListIds.append((component.slice.item.id, views))
                 }
                 if currentIndex != 0, let views = component.slice.allItems[currentIndex - 1].storyItem.views {
-                    preloadViewListIds.append((component.slice.allItems[currentIndex - 1].storyItem.id, views))
+                    preloadViewListIds.append((component.slice.allItems[currentIndex - 1].id, views))
                 }
                 if currentIndex != component.slice.allItems.count - 1, let views = component.slice.allItems[currentIndex + 1].storyItem.views {
-                    preloadViewListIds.append((component.slice.allItems[currentIndex + 1].storyItem.id, views))
+                    preloadViewListIds.append((component.slice.allItems[currentIndex + 1].id, views))
                 }
                 
                 for (id, views) in preloadViewListIds {
-                    if component.sharedViewListsContext.viewLists[StoryId(peerId: component.slice.peer.id, id: id)] == nil {
+                    if component.sharedViewListsContext.viewLists[id] == nil {
                         let defaultSortMode: EngineStoryViewListContext.SortMode
-                        if component.slice.peer.id.isGroupOrChannel {
+                        if component.slice.effectivePeer.id.isGroupOrChannel {
                             defaultSortMode = .repostsFirst
                         } else {
                             defaultSortMode = .reactionsFirst
                         }
-                        let viewList = component.context.engine.messages.storyViewList(peerId: component.slice.peer.id, id: id, views: views, listMode: .everyone, sortMode: defaultSortMode)
-                        component.sharedViewListsContext.viewLists[StoryId(peerId: component.slice.peer.id, id: id)] = viewList
+                        let viewList = component.context.engine.messages.storyViewList(peerId: component.slice.effectivePeer.id, id: id.id, views: views, listMode: .everyone, sortMode: defaultSortMode)
+                        component.sharedViewListsContext.viewLists[id] = viewList
                     }
                 }
                 
@@ -3236,7 +3231,7 @@ public final class StoryItemSetContainerComponent: Component {
                 }
                 
                 var fixedAnimationOffset: CGFloat = 0.0
-                var applyFixedAnimationOffsetIds: [Int32] = []
+                var applyFixedAnimationOffsetIds: [StoryId] = []
                 
                 let normalCollapsedContentAreaHeight: CGFloat = availableSize.height - minimizedHeight
                 
@@ -3281,7 +3276,7 @@ public final class StoryItemSetContainerComponent: Component {
                 maximizedBottomContentHeight = defaultHeight
                 
                 for id in visibleViewListIds {
-                    guard let itemIndex = component.slice.allItems.firstIndex(where: { $0.storyItem.id == id }) else {
+                    guard let itemIndex = component.slice.allItems.firstIndex(where: { $0.id == id }) else {
                         continue
                     }
                     let item = component.slice.allItems[itemIndex]
@@ -3304,7 +3299,7 @@ public final class StoryItemSetContainerComponent: Component {
                     safeInsets.bottom = max(safeInsets.bottom, component.inputHeight)
                     
                     var hasPremium = false
-                    if case let .user(user) = component.slice.peer {
+                    if case let .user(user) = component.slice.effectivePeer {
                         hasPremium = user.isPremium
                     }
                     
@@ -3320,7 +3315,7 @@ public final class StoryItemSetContainerComponent: Component {
                             theme: component.theme,
                             strings: component.strings,
                             sharedListsContext: component.sharedViewListsContext,
-                            peerId: component.slice.peer.id,
+                            peerId: component.slice.effectivePeer.id,
                             safeInsets: safeInsets,
                             storyItem: item.storyItem,
                             hasPremium: hasPremium,
@@ -3334,7 +3329,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 }
                                 self.viewListDisplayState = .hidden
                                 self.isSearchActive = false
-                                self.state?.updated(transition: Transition(animation: .curve(duration: 0.4, curve: .spring)))
+                                self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.4, curve: .spring)))
                             },
                             expandViewStats: {
                             },
@@ -3392,7 +3387,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 guard let self else {
                                     return
                                 }
-                                self.navigateToPeer(peer: peer, chat: true, subject: .message(id: .id(messageId), highlight: nil, timecode: nil))
+                                self.navigateToPeer(peer: peer, chat: true, subject: .message(id: .id(messageId), highlight: nil, timecode: nil, setupReply: false))
                             },
                             peerContextAction: { [weak self] peer, sourceView, gesture in
                                 guard let self, let component = self.component else {
@@ -3438,7 +3433,7 @@ public final class StoryItemSetContainerComponent: Component {
                                                 action: { _ in return false }
                                             ), nil)
                                         })))
-                                    } else {
+                                    } else if isContact {
                                         itemList.append(.action(ContextMenuActionItem(text: component.strings.Story_ContextHideStoriesFrom(peer.compactDisplayTitle).string, icon: { theme in
                                             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Stories"), color: theme.contextMenu.primaryColor)
                                         }, action: { [weak self] _, f in
@@ -3596,7 +3591,7 @@ public final class StoryItemSetContainerComponent: Component {
                                         self.viewListDisplayState = .half
                                     }
                                     
-                                    self.state?.updated(transition: Transition(animation: .curve(duration: 0.5, curve: .spring)))
+                                    self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.5, curve: .spring)))
                                 }
                             },
                             controller: { [weak self] in
@@ -3626,7 +3621,7 @@ public final class StoryItemSetContainerComponent: Component {
                             viewListView.animateIn(transition: transition)
                         }
                     }
-                    /*if id == component.slice.item.storyItem.id {
+                    /*if id == component.slice.item.id {
                         viewListInset = minimizedHeight * viewList.externalState.minimizationFraction + defaultHeight * (1.0 - viewList.externalState.minimizationFraction)
                         inputPanelBottomInset = viewListInset
                         minimizedBottomContentHeight = minimizedHeight
@@ -3637,7 +3632,7 @@ public final class StoryItemSetContainerComponent: Component {
                 
                 if fixedAnimationOffset == 0.0 {
                     for (id, viewList) in self.viewLists {
-                        if let viewListView = viewList.view.view, !visibleViewListIds.contains(id), let itemIndex = component.slice.allItems.firstIndex(where: { $0.storyItem.id == id }) {
+                        if let viewListView = viewList.view.view, !visibleViewListIds.contains(id), let itemIndex = component.slice.allItems.firstIndex(where: { $0.id == id }) {
                             let viewListSize = viewListView.bounds.size
                             var viewListFrame = CGRect(origin: CGPoint(x: viewListBaseOffsetX, y: availableSize.height - viewListSize.height), size: viewListSize)
                             let indexDistance = CGFloat(max(-1, min(1, itemIndex - currentIndex)))
@@ -3658,7 +3653,7 @@ public final class StoryItemSetContainerComponent: Component {
             } else {
                 self.viewListMetrics = nil
             }
-            var removeViewListIds: [Int32] = []
+            var removeViewListIds: [StoryId] = []
             for (id, viewList) in self.viewLists {
                 if !validViewListIds.contains(id) {
                     removeViewListIds.append(id)
@@ -3775,36 +3770,40 @@ public final class StoryItemSetContainerComponent: Component {
                 headerRightOffset -= 51.0
             }
             
-            let moreButtonSize = self.moreButton.update(
-                transition: transition,
-                component: AnyComponent(PlainButtonComponent(
-                    content: AnyComponent(LottieComponent(
-                        content: LottieComponent.AppBundleContent(
-                            name: "anim_story_more"
-                        ),
-                        color: .white,
-                        startingPosition: .end,
-                        size: CGSize(width: 30.0, height: 30.0)
+            var moreButtonSize: CGSize?
+            if case let .user(user) = component.slice.peer, let botInfo = user.botInfo, !botInfo.flags.contains(.canEdit) {
+            } else {
+                moreButtonSize = self.moreButton.update(
+                    transition: transition,
+                    component: AnyComponent(PlainButtonComponent(
+                        content: AnyComponent(LottieComponent(
+                            content: LottieComponent.AppBundleContent(
+                                name: "anim_story_more"
+                            ),
+                            color: .white,
+                            startingPosition: .end,
+                            size: CGSize(width: 30.0, height: 30.0)
+                        )),
+                        effectAlignment: .center,
+                        minSize: CGSize(width: 33.0, height: 64.0),
+                        action: { [weak self] in
+                            guard let self else {
+                                return
+                            }
+                            guard let moreButtonView = self.moreButton.view else {
+                                return
+                            }
+                            if let animationView = (moreButtonView as? PlainButtonComponent.View)?.contentView as? LottieComponent.View {
+                                animationView.playOnce()
+                            }
+                            self.performMoreAction(sourceView: moreButtonView, gesture: nil)
+                        }
                     )),
-                    effectAlignment: .center,
-                    minSize: CGSize(width: 33.0, height: 64.0),
-                    action: { [weak self] in
-                        guard let self else {
-                            return
-                        }
-                        guard let moreButtonView = self.moreButton.view else {
-                            return
-                        }
-                        if let animationView = (moreButtonView as? PlainButtonComponent.View)?.contentView as? LottieComponent.View {
-                            animationView.playOnce()
-                        }
-                        self.performMoreAction(sourceView: moreButtonView, gesture: nil)
-                    }
-                )),
-                environment: {},
-                containerSize: CGSize(width: 33.0, height: 64.0)
-            )
-            if let moreButtonView = self.moreButton.view {
+                    environment: {},
+                    containerSize: CGSize(width: 33.0, height: 64.0)
+                )
+            }
+            if let moreButtonSize, let moreButtonView = self.moreButton.view {
                 if moreButtonView.superview == nil {
                     self.controlsClippingView.addSubview(moreButtonView)
                 }
@@ -3821,7 +3820,7 @@ public final class StoryItemSetContainerComponent: Component {
                 isVideo = true
                 soundAlpha = 1.0
                 for attribute in file.attributes {
-                    if case let .Video(_, _, flags, _) = attribute {
+                    if case let .Video(_, _, flags, _, _, _) = attribute {
                         if flags.contains(.isSilent) {
                             isSilentVideo = true
                             soundAlpha = 0.5
@@ -3854,7 +3853,7 @@ public final class StoryItemSetContainerComponent: Component {
                         var isSilentVideo = false
                         if case let .file(file) = component.slice.item.storyItem.media {
                             for attribute in file.attributes {
-                                if case let .Video(_, _, flags, _) = attribute {
+                                if case let .Video(_, _, flags, _, _, _) = attribute {
                                     if flags.contains(.isSilent) {
                                         isSilentVideo = true
                                     }
@@ -3903,14 +3902,14 @@ public final class StoryItemSetContainerComponent: Component {
             }
             
             let storyPrivacyIcon: StoryPrivacyIconComponent.Privacy?
-            if case .user = component.slice.peer {
+            if case .user = component.slice.effectivePeer {
                 if component.slice.item.storyItem.isCloseFriends {
                     storyPrivacyIcon = .closeFriends
                 } else if component.slice.item.storyItem.isContacts {
                     storyPrivacyIcon = .contacts
                 } else if component.slice.item.storyItem.isSelectedContacts {
                     storyPrivacyIcon = .selectedContacts
-                } else if component.slice.peer.id == component.context.account.peerId {
+                } else if component.slice.effectivePeer.id == component.context.account.peerId {
                     storyPrivacyIcon = .everyone
                 } else {
                     storyPrivacyIcon = nil
@@ -3921,7 +3920,7 @@ public final class StoryItemSetContainerComponent: Component {
             
             if let storyPrivacyIcon {
                 let privacyIcon: ComponentView<Empty>
-                var privacyIconTransition: Transition = itemChanged ? .immediate : .easeInOut(duration: 0.2)
+                var privacyIconTransition: ComponentTransition = itemChanged ? .immediate : .easeInOut(duration: 0.2)
                 if let current = self.privacyIcon {
                     privacyIcon = current
                 } else {
@@ -3935,7 +3934,7 @@ public final class StoryItemSetContainerComponent: Component {
                         content: AnyComponent(
                             StoryPrivacyIconComponent(
                                 privacy: storyPrivacyIcon,
-                                isEditable: component.slice.peer.id == component.context.account.peerId
+                                isEditable: component.slice.effectivePeer.id == component.context.account.peerId
                             )
                         ),
                         effectAlignment: .center,
@@ -3943,7 +3942,7 @@ public final class StoryItemSetContainerComponent: Component {
                             guard let self, let component = self.component else {
                                 return
                             }
-                            if component.slice.peer.id == component.context.account.peerId {
+                            if component.slice.effectivePeer.id == component.context.account.peerId {
                                 self.openItemPrivacySettings()
                                 return
                             }
@@ -3953,11 +3952,11 @@ public final class StoryItemSetContainerComponent: Component {
                             let tooltipText: String
                             switch storyPrivacyIcon {
                             case .closeFriends:
-                                tooltipText = component.strings.Story_TooltipPrivacyCloseFriends2(component.slice.peer.compactDisplayTitle).string
+                                tooltipText = component.strings.Story_TooltipPrivacyCloseFriends2(component.slice.effectivePeer.compactDisplayTitle).string
                             case .contacts:
-                                tooltipText = component.strings.Story_TooltipPrivacyContacts(component.slice.peer.compactDisplayTitle).string
+                                tooltipText = component.strings.Story_TooltipPrivacyContacts(component.slice.effectivePeer.compactDisplayTitle).string
                             case .selectedContacts:
-                                tooltipText = component.strings.Story_TooltipPrivacySelectedContacts(component.slice.peer.compactDisplayTitle).string
+                                tooltipText = component.strings.Story_TooltipPrivacySelectedContacts(component.slice.effectivePeer.compactDisplayTitle).string
                             case .everyone:
                                 tooltipText = ""
                             }
@@ -4011,7 +4010,7 @@ public final class StoryItemSetContainerComponent: Component {
             
             var currentLeftInfoItem: InfoItem?
             if focusedItem != nil {
-                let leftInfoComponent = AnyComponent(StoryAvatarInfoComponent(context: component.context, peer: component.slice.peer))
+                let leftInfoComponent = AnyComponent(StoryAvatarInfoComponent(context: component.context, peer: component.slice.effectivePeer))
                 if let leftInfoItem = self.leftInfoItem, leftInfoItem.component == leftInfoComponent {
                     currentLeftInfoItem = leftInfoItem
                 } else {
@@ -4042,7 +4041,7 @@ public final class StoryItemSetContainerComponent: Component {
                 let centerInfoComponent = AnyComponent(StoryAuthorInfoComponent(
                     context: component.context,
                     strings: component.strings,
-                    peer: component.slice.peer,
+                    peer: component.slice.effectivePeer,
                     forwardInfo: component.slice.item.storyItem.forwardInfo,
                     author: component.slice.item.storyItem.author,
                     timestamp: component.slice.item.storyItem.timestamp,
@@ -4085,10 +4084,10 @@ public final class StoryItemSetContainerComponent: Component {
                                 self.navigateToPeer(peer: author, chat: false)
                             }
                         } else {
-                            if component.slice.peer.id == component.context.account.peerId {
+                            if component.slice.effectivePeer.id == component.context.account.peerId {
                                 self.navigateToMyStories()
                             } else {
-                                self.navigateToPeer(peer: component.slice.peer, chat: false)
+                                self.navigateToPeer(peer: component.slice.effectivePeer, chat: false)
                             }
                         }
                     })),
@@ -4120,10 +4119,10 @@ public final class StoryItemSetContainerComponent: Component {
                         guard let self, let component = self.component else {
                             return
                         }
-                        if component.slice.peer.id == component.context.account.peerId {
+                        if component.slice.effectivePeer.id == component.context.account.peerId {
                             self.navigateToMyStories()
                         } else {
-                            self.navigateToPeer(peer: component.slice.peer, chat: false)
+                            self.navigateToPeer(peer: component.slice.effectivePeer, chat: false)
                         }
                     })),
                     environment: {},
@@ -4157,7 +4156,7 @@ public final class StoryItemSetContainerComponent: Component {
             if let inputPanelSize {
                 let inputPanelFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((availableSize.width - inputPanelSize.width) / 2.0), y: availableSize.height - inputPanelBottomInset - inputPanelSize.height), size: inputPanelSize)
                 inputPanelFrameValue = inputPanelFrame
-                var inputPanelAlpha: CGFloat = (component.slice.peer.id == component.context.account.peerId || component.hideUI || self.isEditingStory || component.slice.item.storyItem.isPending) ? 0.0 : 1.0
+                var inputPanelAlpha: CGFloat = (component.slice.effectivePeer.id == component.context.account.peerId || component.hideUI || self.isEditingStory || component.slice.item.storyItem.isPending) ? 0.0 : 1.0
                 if case .regular = component.metrics.widthClass {
                     inputPanelAlpha *= component.visibilityFraction
                 }
@@ -4169,7 +4168,7 @@ public final class StoryItemSetContainerComponent: Component {
                     }
                     
                     var inputPanelOffset: CGFloat = 0.0
-                    if component.slice.peer.id != component.context.account.peerId && !self.inputPanelExternalState.isEditing {
+                    if component.slice.effectivePeer.id != component.context.account.peerId && !self.inputPanelExternalState.isEditing {
                         let bandingOffset = scrollingRubberBandingOffset(offset: verticalPanFraction * availableSize.height, bandingStart: 0.0, range: 10.0)
                         inputPanelOffset = -max(0.0, min(10.0, bandingOffset))
                     }
@@ -4182,7 +4181,7 @@ public final class StoryItemSetContainerComponent: Component {
                 }
             }
             
-            if let captionItem = self.captionItem, captionItem.itemId != component.slice.item.storyItem.id {
+            if let captionItem = self.captionItem, captionItem.itemId != component.slice.item.id {
                 self.captionItem = nil
                 if let captionItemView = captionItem.view.view {
                     captionItemView.removeFromSuperview()
@@ -4198,13 +4197,13 @@ public final class StoryItemSetContainerComponent: Component {
                     if !transition.animation.isImmediate {
                         captionItemTransition = .immediate
                     }
-                    captionItem = CaptionItem(itemId: component.slice.item.storyItem.id)
+                    captionItem = CaptionItem(itemId: component.slice.item.id)
                     self.captionItem = captionItem
                 }
                 
                 var enableEntities = true
-                if case .user = component.slice.peer {
-                    if !component.slice.peer.isService && !component.slice.peer.isPremium {
+                if case .user = component.slice.effectivePeer {
+                    if !component.slice.effectivePeer.isService && !component.slice.effectivePeer.isPremium {
                         enableEntities = false
                     }
                 }
@@ -4220,7 +4219,7 @@ public final class StoryItemSetContainerComponent: Component {
                         strings: component.strings,
                         theme: component.theme,
                         text: component.slice.item.storyItem.text,
-                        author: component.slice.peer,
+                        author: component.slice.effectivePeer,
                         forwardInfo: component.slice.item.storyItem.forwardInfo,
                         forwardInfoStory: forwardInfoStory,
                         entities: enableEntities ? component.slice.item.storyItem.entities : [],
@@ -4231,7 +4230,7 @@ public final class StoryItemSetContainerComponent: Component {
                             }
                             switch action {
                             case let .url(url, concealed):
-                                let _ = openUserGeneratedUrl(context: component.context, peerId: component.slice.peer.id, url: url, concealed: concealed, skipUrlAuth: false, skipConcealedAlert: false, present: { [weak self] c in
+                                let _ = openUserGeneratedUrl(context: component.context, peerId: component.slice.effectivePeer.id, url: url, concealed: concealed, skipUrlAuth: false, skipConcealedAlert: false, forceDark: true, present: { [weak self] c in
                                     guard let self, let component = self.component, let controller = component.controller() else {
                                         return
                                     }
@@ -4241,6 +4240,12 @@ public final class StoryItemSetContainerComponent: Component {
                                         return
                                     }
                                     self.sendMessageContext.openResolved(view: self, result: resolved, forceExternal: false, concealed: concealed)
+                                }, alertDisplayUpdated: { [weak self] alertController in
+                                    guard let self else {
+                                        return
+                                    }
+                                    self.sendMessageContext.statusController = alertController
+                                    self.updateIsProgressPaused()
                                 })
                             case let .textMention(value):
                                 self.sendMessageContext.openPeerMention(view: self, name: value)
@@ -4259,7 +4264,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 return
                             }
                             self.sendMessageContext.presentTextEntityActions(view: self, action: action, openUrl: { [weak self] url, concealed in
-                                let _ = openUserGeneratedUrl(context: component.context, peerId: component.slice.peer.id, url: url, concealed: concealed, skipUrlAuth: false, skipConcealedAlert: false, present: { [weak self] c in
+                                let _ = openUserGeneratedUrl(context: component.context, peerId: component.slice.effectivePeer.id, url: url, concealed: concealed, skipUrlAuth: false, skipConcealedAlert: false, present: { [weak self] c in
                                     guard let self, let component = self.component, let controller = component.controller() else {
                                         return
                                     }
@@ -4302,7 +4307,7 @@ public final class StoryItemSetContainerComponent: Component {
                                     self.sendMessageContext.currentSpeechHolder = speechHolder
                                 }
                             case .translate:
-                                self.sendMessageContext.performTranslateTextAction(view: self, text: text.string)
+                                self.sendMessageContext.performTranslateTextAction(view: self, text: text.string, entities: [])
                             case .quote:
                                 break
                             }
@@ -4319,7 +4324,7 @@ public final class StoryItemSetContainerComponent: Component {
                             }
                             if let story {
                                 let context = component.context
-                                let peerId = component.slice.peer.id
+                                let peerId = component.slice.effectivePeer.id
                                 let currentResult: ResolvedUrl = .story(peerId: peerId, id: component.slice.item.storyItem.id)
                                 
                                 self.sendMessageContext.openResolved(view: self, result: .story(peerId: peer.id, id: story.id), completion: { [weak self] in
@@ -4338,6 +4343,7 @@ public final class StoryItemSetContainerComponent: Component {
                                                 },
                                                 sendFile: nil,
                                                 sendSticker: nil,
+                                                sendEmoji: nil,
                                                 requestMessageActionUrlAuth: nil,
                                                 joinVoiceChat: nil,
                                                 present: { _, _ in
@@ -4375,6 +4381,12 @@ public final class StoryItemSetContainerComponent: Component {
                 let captionFrame = CGRect(origin: CGPoint(x: 0.0, y: contentFrame.height - captionSize.height), size: captionSize)
                 if let captionItemView = captionItem.view.view {
                     if captionItemView.superview == nil {
+                        if case .regular = component.metrics.widthClass {
+                            self.topContentGradientView.layer.cornerRadius = 12.0
+                            self.topContentGradientView.clipsToBounds = true
+                            captionItemView.layer.cornerRadius = 12.0
+                            captionItemView.clipsToBounds = true
+                        }
                         self.controlsContainerView.insertSubview(captionItemView, aboveSubview: self.contentDimView)
                     }
                     captionItemTransition.setFrame(view: captionItemView, frame: captionFrame)
@@ -4437,7 +4449,7 @@ public final class StoryItemSetContainerComponent: Component {
                         context: component.context,
                         animationCache: component.context.animationCache,
                         presentationData: component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme),
-                        items: reactionItems.map(ReactionContextItem.reaction),
+                        items: reactionItems.map { ReactionContextItem.reaction(item: $0, icon: .none) },
                         selectedItems: component.slice.item.storyItem.myReaction.flatMap { Set([$0]) } ?? Set(),
                         title: self.displayLikeReactions ? nil : (isGroup ? component.strings.Story_SendReactionAsGroupMessage : component.strings.Story_SendReactionAsMessage),
                         reactionsLocked: false,
@@ -4452,6 +4464,23 @@ public final class StoryItemSetContainerComponent: Component {
                                 return EmojiComponentReactionItem(reaction: reaction.reaction.rawValue, file: reaction.stillAnimation)
                             }
                             
+                            var selectedItems: Set<AnyHashable> = Set()
+                            if let myReaction = component.slice.item.storyItem.myReaction {
+                                switch myReaction {
+                                case .builtin, .stars:
+                                    if let availableReactions = component.availableReactions {
+                                        for availableReaction in availableReactions.reactionItems {
+                                            if availableReaction.reaction.rawValue == myReaction {
+                                                selectedItems.insert(AnyHashable(availableReaction.stillAnimation.fileId))
+                                                break
+                                            }
+                                        }
+                                    }
+                                case let .custom(fileId):
+                                    selectedItems.insert(AnyHashable(MediaId(namespace: Namespaces.Media.CloudFile, id: fileId)))
+                                }
+                            }
+                            
                             return EmojiPagerContentComponent.emojiInputData(
                                 context: component.context,
                                 animationCache: animationCache,
@@ -4463,7 +4492,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 areUnicodeEmojiEnabled: false,
                                 areCustomEmojiEnabled: true,
                                 chatPeerId: component.context.account.peerId,
-                                selectedItems: Set(),
+                                selectedItems: selectedItems,
                                 premiumIfSavedMessages: false
                             )
                         },
@@ -4471,19 +4500,19 @@ public final class StoryItemSetContainerComponent: Component {
                             guard let self else {
                                 return
                             }
-                            self.state?.updated(transition: Transition(transition))
+                            self.state?.updated(transition: ComponentTransition(transition))
                         },
                         requestLayout: { [weak self] transition in
                             guard let self else {
                                 return
                             }
-                            self.state?.updated(transition: Transition(transition))
+                            self.state?.updated(transition: ComponentTransition(transition))
                         },
                         requestUpdateOverlayWantsToBeBelowKeyboard: { [weak self] transition in
                             guard let self else {
                                 return
                             }
-                            self.state?.updated(transition: Transition(transition))
+                            self.state?.updated(transition: ComponentTransition(transition))
                         }
                     )
                     reactionContextNode.displayTail = self.displayLikeReactions
@@ -4522,18 +4551,18 @@ public final class StoryItemSetContainerComponent: Component {
                             
                             if self.displayLikeReactions {
                                 if component.slice.item.storyItem.myReaction == updateReaction.reaction {
-                                    let _ = component.context.engine.messages.setStoryReaction(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id, reaction: nil).startStandalone()
+                                    let _ = component.context.engine.messages.setStoryReaction(peerId: component.slice.effectivePeer.id, id: component.slice.item.storyItem.id, reaction: nil).startStandalone()
                                     self.displayLikeReactions = false
-                                    self.state?.updated(transition: Transition(animation: .curve(duration: 0.25, curve: .easeInOut)))
+                                    self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)))
                                 } else {
                                     if hasFirstResponder(self) {
                                         self.sendMessageContext.currentInputMode = .text
                                         self.endEditing(true)
                                     }
-                                    self.state?.updated(transition: Transition(animation: .curve(duration: 0.25, curve: .easeInOut)))
+                                    self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)))
                                     
                                     self.waitingForReactionAnimateOutToLike = updateReaction.reaction
-                                    let _ = component.context.engine.messages.setStoryReaction(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id, reaction: updateReaction.reaction).startStandalone()
+                                    let _ = component.context.engine.messages.setStoryReaction(peerId: component.slice.effectivePeer.id, id: component.slice.item.id.id, reaction: updateReaction.reaction).startStandalone()
                                 }
                             } else {
                                 let _ = (component.context.engine.stickers.availableReactions()
@@ -4570,7 +4599,7 @@ public final class StoryItemSetContainerComponent: Component {
                                             
                                             standaloneReactionAnimation.frame = self.bounds
                                             self.addSubview(standaloneReactionAnimation.view)
-                                        }, completion: { [weak targetView, weak reactionContextNode] in
+                                        }, onHit: nil, completion: { [weak targetView, weak reactionContextNode] in
                                             targetView?.removeFromSuperview()
                                             if let reactionContextNode {
                                                 reactionContextNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false, completion: { [weak reactionContextNode] _ in
@@ -4584,7 +4613,7 @@ public final class StoryItemSetContainerComponent: Component {
                                         self.sendMessageContext.currentInputMode = .text
                                         self.endEditing(true)
                                     }
-                                    self.state?.updated(transition: Transition(animation: .curve(duration: 0.25, curve: .easeInOut)))
+                                    self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)))
                                                                 
                                     var text = ""
                                     var messageAttributes: [MessageAttribute] = []
@@ -4608,6 +4637,8 @@ public final class StoryItemSetContainerComponent: Component {
                                                 }
                                             }
                                         }
+                                    case .stars:
+                                        break
                                     }
 
                                     let message: EnqueueMessage = .message(
@@ -4617,7 +4648,7 @@ public final class StoryItemSetContainerComponent: Component {
                                         mediaReference: nil,
                                         threadId: nil,
                                         replyToMessageId: nil,
-                                        replyToStoryId: StoryId(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id),
+                                        replyToStoryId: component.slice.item.id,
                                         localGroupingKey: nil,
                                         correlationId: nil,
                                         bubbleUpEmojiOrStickersets: []
@@ -4626,7 +4657,7 @@ public final class StoryItemSetContainerComponent: Component {
                                     let context = component.context
                                     let presentationData = component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme)
                                     let presentController = component.presentController
-                                    let peer = component.slice.peer
+                                    let peer = component.slice.effectivePeer
                                     
                                     let _ = (enqueueMessages(account: context.account, peerId: peer.id, messages: [message])
                                     |> deliverOnMainQueue).startStandalone(next: { [weak self] messageIds in
@@ -4635,7 +4666,7 @@ public final class StoryItemSetContainerComponent: Component {
                                                 presentationData: presentationData,
                                                 content: .sticker(context: context, file: animation, loop: false, title: nil, text: component.strings.Story_ToastReactionSent, undoText: component.strings.Story_ToastViewInChat, customAction: { [weak self] in
                                                     if let messageId = messageIds.first, let self {
-                                                        self.navigateToPeer(peer: peer, chat: true, subject: messageId.flatMap { .message(id: .id($0), highlight: nil, timecode: nil) })
+                                                        self.navigateToPeer(peer: peer, chat: true, subject: messageId.flatMap { .message(id: .id($0), highlight: nil, timecode: nil, setupReply: false) })
                                                     }
                                                 }),
                                                 elevatedLayout: false,
@@ -4754,7 +4785,7 @@ public final class StoryItemSetContainerComponent: Component {
                             
                             standaloneReactionAnimation.frame = self.bounds
                             self.componentContainerView.addSubview(standaloneReactionAnimation.view)
-                        }, completion: { [weak reactionContextNode] in
+                        }, onHit: nil, completion: { [weak reactionContextNode] in
                             if let reactionContextNode {
                                 reactionContextNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false, completion: { [weak reactionContextNode] _ in
                                     reactionContextNode?.view.removeFromSuperview()
@@ -4768,7 +4799,7 @@ public final class StoryItemSetContainerComponent: Component {
                             return
                         }
                         self.displayLikeReactions = false
-                        self.state?.updated(transition: Transition(animation: .curve(duration: 0.25, curve: .easeInOut)))
+                        self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)))
                     }
                 }
             } else {
@@ -4784,7 +4815,7 @@ public final class StoryItemSetContainerComponent: Component {
                             reactionContextNode.animateOut(to: reactionsAnchorRect, animatingOutToReaction: true)
                         }
                     } else {
-                        let reactionTransition = Transition.easeInOut(duration: 0.25)
+                        let reactionTransition = ComponentTransition.easeInOut(duration: 0.25)
                         reactionTransition.setAlpha(view: reactionContextNode.view, alpha: 0.0, completion: { [weak reactionContextNode] _ in
                             reactionContextNode?.view.removeFromSuperview()
                         })
@@ -4823,13 +4854,13 @@ public final class StoryItemSetContainerComponent: Component {
             transition.setFrame(view: self.contentDimView, frame: CGRect(origin: CGPoint(), size: contentFrame.size))
             
             if transition.animation.isImmediate && forceDimAnimation && self.topContentGradientView.alpha != topGradientAlpha {
-                Transition(animation: .curve(duration: 0.25, curve: .easeInOut)).setAlpha(view: self.topContentGradientView, alpha: topGradientAlpha)
+                ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)).setAlpha(view: self.topContentGradientView, alpha: topGradientAlpha)
             } else {
                 transition.setAlpha(view: self.topContentGradientView, alpha: topGradientAlpha)
             }
             
             if transition.animation.isImmediate && forceDimAnimation && self.contentDimView.alpha != dimAlpha {
-                Transition(animation: .curve(duration: 0.25, curve: .easeInOut)).setAlpha(view: self.contentDimView, alpha: dimAlpha)
+                ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)).setAlpha(view: self.contentDimView, alpha: dimAlpha)
             } else {
                 transition.setAlpha(view: self.contentDimView, alpha: dimAlpha)
             }
@@ -4840,7 +4871,7 @@ public final class StoryItemSetContainerComponent: Component {
             self.scroller.contentSize = CGSize(width: itemLayout.fullItemScrollDistance * CGFloat(max(0, component.slice.allItems.count - 1)) + availableSize.width, height: availableSize.height)
             self.scroller.isScrollEnabled = itemLayout.contentScaleFraction >= 1.0 - 0.0001
             
-            if let centralIndex = component.slice.allItems.firstIndex(where: { $0.storyItem.id == component.slice.item.storyItem.id }) {
+            if let centralIndex = component.slice.allItems.firstIndex(where: { $0.id == component.slice.item.id }) {
                 let centralX = itemLayout.fullItemScrollDistance * CGFloat(centralIndex)
                 if itemLayout.contentScaleFraction <= 0.0001 {
                     if abs(self.scroller.contentOffset.x - centralX) > CGFloat.ulpOfOne {
@@ -4865,7 +4896,7 @@ public final class StoryItemSetContainerComponent: Component {
             
             let navigationStripSideInset: CGFloat = 8.0
             let navigationStripTopInset: CGFloat = 8.0
-            if let focusedItem, let visibleItem = self.visibleItems[focusedItem.storyItem.id], let index = focusedItem.position {
+            if let focusedItem, let visibleItem = self.visibleItems[focusedItem.id], let index = focusedItem.position {
                 var index = max(0, min(index, component.slice.totalCount - 1))
                 var count = component.slice.totalCount
                 if let dayCounters = focusedItem.dayCounters {
@@ -4925,7 +4956,7 @@ public final class StoryItemSetContainerComponent: Component {
             }
             
             component.externalState.derivedMediaSize = contentFrame.size
-            if component.slice.peer.id == component.context.account.peerId {
+            if component.slice.effectivePeer.id == component.context.account.peerId {
                 component.externalState.derivedBottomInset = availableSize.height - itemsContainerFrame.maxY
             } else if let inputPanelFrameValue {
                 component.externalState.derivedBottomInset = availableSize.height - min(inputPanelFrameValue.minY, contentFrame.maxY)
@@ -5273,12 +5304,14 @@ public final class StoryItemSetContainerComponent: Component {
                 return
             }
             
-            guard let viewList = self.viewLists[component.slice.item.storyItem.id], let viewListView = viewList.view.view as? StoryItemSetViewListComponent.View, let viewListContext = viewListView.currentViewList else {
+            let storyId = StoryId(peerId: peer.id, id: id)
+            
+            guard let viewList = self.viewLists[component.slice.item.id], let viewListView = viewList.view.view as? StoryItemSetViewListComponent.View, let viewListContext = viewListView.currentViewList else {
                 return
             }
             
             let context = component.context
-            let storyContent = RepostStoriesContentContextImpl(context: context, originalPeerId: component.slice.peer.id, originalStory: component.slice.item.storyItem, focusedStoryId: StoryId(peerId: peer.id, id: id), viewListContext: viewListContext, readGlobally: false)
+            let storyContent = RepostStoriesContentContextImpl(context: context, originalPeerId: component.slice.effectivePeer.id, originalStory: component.slice.item.storyItem, focusedStoryId: storyId, viewListContext: viewListContext, readGlobally: false)
             let _ = (storyContent.state
             |> take(1)
             |> deliverOnMainQueue).startStandalone(next: { [weak controller, weak viewListView, weak sourceView] _ in
@@ -5345,295 +5378,64 @@ public final class StoryItemSetContainerComponent: Component {
         }
         
         private let updateDisposable = MetaDisposable()
-        func openStoryEditing(repost: Bool = false) {
-            guard let component = self.component, let peerReference = PeerReference(component.slice.peer._asPeer()) else {
+        func openStoryEditing(repost: Bool = false, cover: Bool = false) {
+            guard let component = self.component else {
                 return
             }
-            let context = component.context
-            let peerId = component.slice.peer.id
-            let item = component.slice.item.storyItem
-            let id = item.id
         
             self.isEditingStory = true
             self.updateIsProgressPaused()
             self.state?.updated(transition: .easeInOut(duration: 0.2))
             
             var videoPlaybackPosition: Double?
-            if let visibleItem = self.visibleItems[component.slice.item.storyItem.id], let view = visibleItem.view.view as? StoryItemContentComponent.View {
-                videoPlaybackPosition = view.videoPlaybackPosition
-            }
-            
-            let subject: Signal<MediaEditorScreen.Subject?, NoError>
-            subject = getStorySource(engine: component.context.engine, peerId: component.context.account.peerId, id: Int64(item.id))
-            |> mapToSignal { source in
-                if !repost, let source {
-                    return .single(.draft(source, Int64(item.id)))
-                } else {
-                    let media = item.media._asMedia()
-                    return fetchMediaData(context: context, postbox: context.account.postbox, userLocation: .peer(peerReference.id), customUserContentType: .story, mediaReference: .story(peer: peerReference, id: item.id, media: media))
-                    |> mapToSignal { (value, isImage) -> Signal<MediaEditorScreen.Subject?, NoError> in
-                        guard case let .data(data) = value, data.complete else {
-                            return .complete()
-                        }
-                        if let image = UIImage(contentsOfFile: data.path) {
-                            return .single(nil)
-                            |> then(
-                                .single(.image(image, PixelDimensions(image.size), nil, .bottomRight))
-                                |> delay(0.1, queue: Queue.mainQueue())
-                            )
-                        } else {
-                            var duration: Double?
-                            if let file = media as? TelegramMediaFile {
-                                duration = file.duration
+            if let visibleItem = self.visibleItems[component.slice.item.id], let view = visibleItem.view.view as? StoryItemContentComponent.View {
+                if cover {
+                    if case let .file(file) = component.slice.item.storyItem.media {
+                        for attribute in file.attributes {
+                            if case let .Video(_, _, _, _, coverTime, _) = attribute {
+                                videoPlaybackPosition = coverTime
                             }
-                            let symlinkPath = data.path + ".mp4"
-                            if fileSize(symlinkPath) == nil {
-                                let _ = try? FileManager.default.linkItem(atPath: data.path, toPath: symlinkPath)
-                            }
-                            return .single(nil)
-                            |> then(
-                                .single(.video(symlinkPath, nil, false, nil, nil, PixelDimensions(width: 720, height: 1280), duration ?? 0.0, [], .bottomRight))
-                            )
                         }
                     }
+                } else {
+                    videoPlaybackPosition = view.videoPlaybackPosition
                 }
             }
             
-            let initialCaption: NSAttributedString?
-            let initialPrivacy: EngineStoryPrivacy?
-            let initialMediaAreas: [MediaArea]
-            if repost {
-                initialCaption = nil
-                initialPrivacy = nil
-                initialMediaAreas = []
-            } else {
-                initialCaption = chatInputStateStringWithAppliedEntities(item.text, entities: item.entities)
-                initialPrivacy = item.privacy
-                initialMediaAreas = item.mediaAreas
-            }
-            
-            let externalState = MediaEditorTransitionOutExternalState(
-                storyTarget: nil,
-                isForcedTarget: false,
-                isPeerArchived: false,
-                transitionOut: nil
-            )
-            
-            var updateProgressImpl: ((Float) -> Void)?
-            let controller = MediaEditorScreen(
-                context: context,
-                mode: .storyEditor,
-                subject: subject,
-                isEditing: !repost,
-                forwardSource: repost ? (component.slice.peer, item) : nil,
-                initialCaption: initialCaption,
-                initialPrivacy: initialPrivacy,
-                initialMediaAreas: initialMediaAreas,
-                initialVideoPosition: videoPlaybackPosition,
+            guard let controller = MediaEditorScreen.makeEditStoryController(
+                context: component.context,
+                peer: component.slice.effectivePeer,
+                storyItem: component.slice.item.storyItem,
+                videoPlaybackPosition: videoPlaybackPosition,
+                cover: cover,
+                repost: repost,
                 transitionIn: .noAnimation,
-                transitionOut: { finished, isNew in
-                    if repost && finished {
-                        if let transitionOut = externalState.transitionOut?(externalState.storyTarget, externalState.isPeerArchived), let destinationView = transitionOut.destinationView {
-                            return MediaEditorScreen.TransitionOut(
-                                destinationView: destinationView,
-                                destinationRect: transitionOut.destinationRect,
-                                destinationCornerRadius: transitionOut.destinationCornerRadius
-                            )
-                        } else {
-                            return nil
-                        }
-                    } else {
-                        return nil
-                    }
-                },
-                completion: { [weak self] result, commit in
+                transitionOut: nil,
+                completed: { [weak self] in
                     guard let self else {
                         return
                     }
-                                        
-                    let entities = generateChatInputTextEntities(result.caption)
-                    
-                    if repost {
-                        let target: Stories.PendingTarget
-                        let targetPeerId: EnginePeer.Id
-                        if let sendAsPeerId = result.options.sendAsPeerId {
-                            target = .peer(sendAsPeerId)
-                            targetPeerId = sendAsPeerId
-                        } else {
-                            target = .myStories
-                            targetPeerId = context.account.peerId
-                        }
-                        externalState.storyTarget = target
-                        
-                        self.component?.controller()?.dismiss(animated: false)
-                        
-                        let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: targetPeerId))
-                        |> deliverOnMainQueue).startStandalone(next: { peer in
-                            guard let peer else {
-                                return
-                            }
-                            
-                            if case let .user(user) = peer {
-                                externalState.isPeerArchived = user.storiesHidden ?? false
-                                
-                            } else if case let .channel(channel) = peer {
-                                externalState.isPeerArchived = channel.storiesHidden ?? false
-                            }
-                            
-                            let forwardInfo = Stories.PendingForwardInfo(peerId: component.slice.peer.id, storyId: item.id, isModified: result.media != nil)
-                            
-                            if let rootController = context.sharedContext.mainWindow?.viewController as? TelegramRootControllerInterface {
-                                var existingMedia: EngineMedia?
-                                if let _ = result.media {
-                                } else {
-                                    existingMedia = item.media
-                                }
-                                rootController.proceedWithStoryUpload(target: target, result: result as! MediaEditorScreenResult, existingMedia: existingMedia, forwardInfo: forwardInfo, externalState: externalState, commit: commit)
-                            }
-                        })
-                    } else {
-                        var updatedText: String?
-                        var updatedEntities: [MessageTextEntity]?
-                        if result.caption.string != item.text || entities != item.entities {
-                            updatedText = result.caption.string
-                            updatedEntities = entities
-                        }
-                        
-                        if let mediaResult = result.media {
-                            switch mediaResult {
-                            case let .image(image, dimensions):
-                                updateProgressImpl?(0.0)
-                                
-                                let tempFile = TempBox.shared.tempFile(fileName: "file")
-                                defer {
-                                    TempBox.shared.dispose(tempFile)
-                                }
-                                if let imageData = compressImageToJPEG(image, quality: 0.7, tempFilePath: tempFile.path) {
-                                    self.updateDisposable.set((context.engine.messages.editStory(peerId: peerId, id: id, media: .image(dimensions: dimensions, data: imageData, stickers: result.stickers), mediaAreas: result.mediaAreas, text: updatedText, entities: updatedEntities, privacy: nil)
-                                    |> deliverOnMainQueue).startStrict(next: { [weak self] result in
-                                        guard let self else {
-                                            return
-                                        }
-                                        switch result {
-                                        case let .progress(progress):
-                                            updateProgressImpl?(progress)
-                                        case .completed:
-                                            Queue.mainQueue().after(0.1) {
-                                                self.isEditingStory = false
-                                                self.rewindCurrentItem()
-                                                self.updateIsProgressPaused()
-                                                self.state?.updated(transition: .easeInOut(duration: 0.2))
-                                                
-                                                HapticFeedback().success()
-                                                
-                                                commit({})
-                                            }
-                                        }
-                                    }))
-                                }
-                            case let .video(content, firstFrameImage, values, duration, dimensions):
-                                updateProgressImpl?(0.0)
-                                
-                                if let valuesData = try? JSONEncoder().encode(values) {
-                                    let data = MemoryBuffer(data: valuesData)
-                                    let digest = MemoryBuffer(data: data.md5Digest())
-                                    let adjustments = VideoMediaResourceAdjustments(data: data, digest: digest, isStory: true)
-                                    
-                                    let resource: TelegramMediaResource
-                                    switch content {
-                                    case let .imageFile(path):
-                                        resource = LocalFileVideoMediaResource(randomId: Int64.random(in: .min ... .max), path: path, adjustments: adjustments)
-                                    case let .videoFile(path):
-                                        resource = LocalFileVideoMediaResource(randomId: Int64.random(in: .min ... .max), path: path, adjustments: adjustments)
-                                    case let .asset(localIdentifier):
-                                        resource = VideoLibraryMediaResource(localIdentifier: localIdentifier, conversion: .compress(adjustments))
-                                    }
-                                    
-                                    let tempFile = TempBox.shared.tempFile(fileName: "file")
-                                    defer {
-                                        TempBox.shared.dispose(tempFile)
-                                    }
-                                    let firstFrameImageData = firstFrameImage.flatMap { compressImageToJPEG($0, quality: 0.6, tempFilePath: tempFile.path) }
-                                    let firstFrameFile = firstFrameImageData.flatMap { data -> TempBoxFile? in
-                                        let file = TempBox.shared.tempFile(fileName: "image.jpg")
-                                        if let _ = try? data.write(to: URL(fileURLWithPath: file.path)) {
-                                            return file
-                                        } else {
-                                            return nil
-                                        }
-                                    }
-                                    
-                                    self.updateDisposable.set((context.engine.messages.editStory(peerId: peerId, id: id, media: .video(dimensions: dimensions, duration: duration, resource: resource, firstFrameFile: firstFrameFile, stickers: result.stickers), mediaAreas: result.mediaAreas, text: updatedText, entities: updatedEntities, privacy: nil)
-                                    |> deliverOnMainQueue).startStrict(next: { [weak self] result in
-                                        guard let self else {
-                                            return
-                                        }
-                                        switch result {
-                                        case let .progress(progress):
-                                            updateProgressImpl?(progress)
-                                        case .completed:
-                                            Queue.mainQueue().after(0.1) {
-                                                self.isEditingStory = false
-                                                self.rewindCurrentItem()
-                                                self.updateIsProgressPaused()
-                                                self.state?.updated(transition: .easeInOut(duration: 0.2))
-                                                
-                                                HapticFeedback().success()
-                                                
-                                                commit({})
-                                            }
-                                        }
-                                    }))
-                                }
-                            default:
-                                break
-                            }
-                        } else if updatedText != nil {
-                            let _ = (context.engine.messages.editStory(peerId: peerId, id: id, media: nil, mediaAreas: nil, text: updatedText, entities: updatedEntities, privacy: nil)
-                            |> deliverOnMainQueue).startStandalone(next: { [weak self] result in
-                                switch result {
-                                case .completed:
-                                    Queue.mainQueue().after(0.1) {
-                                        if let self {
-                                            self.isEditingStory = false
-                                            self.rewindCurrentItem()
-                                            self.updateIsProgressPaused()
-                                            self.state?.updated(transition: .easeInOut(duration: 0.2))
-                                            
-                                            HapticFeedback().success()
-                                        }
-                                        commit({})
-                                    }
-                                default:
-                                    break
-                                }
-                            })
-                        } else {
-                            self.isEditingStory = false
-                            self.rewindCurrentItem()
-                            self.updateIsProgressPaused()
-                            self.state?.updated(transition: .easeInOut(duration: 0.2))
-                            
-                            HapticFeedback().success()
-                            
-                            commit({})
-                        }
+                    self.component?.controller()?.dismiss(animated: false)
+                },
+                willDismiss: { [weak self] in
+                    guard let self else {
+                        return
                     }
+                    self.isEditingStory = false
+                    self.rewindCurrentItem()
+                    self.updateIsProgressPaused()
+                    self.state?.updated(transition: .easeInOut(duration: 0.2))
+                },
+                update: { [weak self] disposable in
+                    guard let self else {
+                        return
+                    }
+                    self.updateDisposable.set(disposable)
                 }
-            )
-            controller.willDismiss = { [weak self] in
-                self?.isEditingStory = false
-                self?.rewindCurrentItem()
-                self?.updateIsProgressPaused()
-                self?.state?.updated(transition: .easeInOut(duration: 0.2))
+            ) else {
+                return
             }
-            controller.navigationPresentation = .flatModal
             self.component?.controller()?.push(controller)
-            updateProgressImpl = { [weak controller, weak self] progress in
-                controller?.updateEditProgress(progress, cancel: { [weak self] in
-                    self?.updateDisposable.set(nil)
-                })
-            }
         }
         
         private func presentSaveUpgradeScreen() {
@@ -5726,7 +5528,7 @@ public final class StoryItemSetContainerComponent: Component {
             HapticFeedback().impact()
             
             let _ = combineLatest(queue: Queue.mainQueue(),
-                component.context.engine.peers.getChannelBoostStatus(peerId: component.slice.peer.id),
+                component.context.engine.peers.getChannelBoostStatus(peerId: component.slice.effectivePeer.id),
                 component.context.engine.peers.getMyBoostStatus()
             ).startStandalone(next: { [weak self] boostStatus, myBoostStatus in
                 guard let self, let component = self.component, let boostStatus, let myBoostStatus else {
@@ -5734,7 +5536,7 @@ public final class StoryItemSetContainerComponent: Component {
                 }
                 let boostController = PremiumBoostLevelsScreen(
                     context: component.context,
-                    peerId: component.slice.peer.id,
+                    peerId: component.slice.effectivePeer.id,
                     mode: .user(mode: .unrestrict(Int(boostsToUnrestrict))),
                     status: boostStatus,
                     myBoostStatus: myBoostStatus,
@@ -5815,7 +5617,7 @@ public final class StoryItemSetContainerComponent: Component {
         }
         
         private func requestSave() {
-            guard let component = self.component, let peerReference = PeerReference(component.slice.peer._asPeer()) else {
+            guard let component = self.component, let peerReference = PeerReference(component.slice.effectivePeer._asPeer()) else {
                 return
             }
             
@@ -5854,9 +5656,9 @@ public final class StoryItemSetContainerComponent: Component {
             guard let component = self.component else {
                 return
             }
-            if component.slice.peer.id == component.context.account.peerId {
+            if component.slice.effectivePeer.id == component.context.account.peerId {
                 self.performMyMoreAction(sourceView: sourceView, gesture: gesture)
-            } else if case let .channel(channel) = component.slice.peer {
+            } else if case let .channel(channel) = component.slice.effectivePeer {
                 var canPerformStoryActions = false
                 
                 if channel.hasPermission(.editStories) {
@@ -5881,6 +5683,60 @@ public final class StoryItemSetContainerComponent: Component {
             }
         }
         
+        private func performDeleteAction() {
+            guard let component = self.component else {
+                return
+            }
+            
+            let presentationData = component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme)
+            let actionSheet = ActionSheetController(presentationData: presentationData)
+            
+            let deleteTitle: String
+            if case let .user(user) = component.slice.peer, user.botInfo != nil {
+                deleteTitle = component.strings.BotPreview_ViewContextDelete
+            } else {
+                deleteTitle = component.strings.Story_ContextDeleteStory
+            }
+            
+            actionSheet.setItemGroups([
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: deleteTitle, color: .destructive, action: { [weak self, weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                        
+                        guard let self, let component = self.component else {
+                            return
+                        }
+                        component.delete()
+                    })
+                ]),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            
+            actionSheet.dismissed = { [weak self] _ in
+                guard let self else {
+                    return
+                }
+                self.sendMessageContext.actionSheet = nil
+                self.updateIsProgressPaused()
+            }
+            self.sendMessageContext.actionSheet = actionSheet
+            self.updateIsProgressPaused()
+            
+            component.presentController(actionSheet, nil)
+        }
+        
+        private func performReorderAction() {
+            guard let component = self.component else {
+                return
+            }
+            
+            component.reorder()
+        }
+        
         private func performLikeAction() {
             guard let component = self.component else {
                 return
@@ -5894,7 +5750,7 @@ public final class StoryItemSetContainerComponent: Component {
                 var likeButtonView: UIView?
                 var addTracingOffset: ((UIView) -> Void)?
                 
-                if let visibleItem = self.visibleItems[component.slice.item.storyItem.id], let footerPanelView = visibleItem.footerPanel?.view as? StoryFooterPanelComponent.View {
+                if let visibleItem = self.visibleItems[component.slice.item.id], let footerPanelView = visibleItem.footerPanel?.view as? StoryFooterPanelComponent.View {
                     likeButtonView = footerPanelView.likeButtonView
                     addTracingOffset = { [weak footerPanelView] view in
                         footerPanelView?.setLikeButtonTracingOffset(view: view)
@@ -5910,7 +5766,7 @@ public final class StoryItemSetContainerComponent: Component {
                     return
                 }
                 
-                let _ = component.context.engine.messages.setStoryReaction(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id, reaction: component.slice.item.storyItem.myReaction == nil ? .builtin("❤") : nil).startStandalone()
+                let _ = component.context.engine.messages.setStoryReaction(peerId: component.slice.effectivePeer.id, id: component.slice.item.id.id, reaction: component.slice.item.storyItem.myReaction == nil ? .builtin("❤") : nil).startStandalone()
                 
                 if component.slice.item.storyItem.myReaction != nil {
                     return
@@ -5987,7 +5843,7 @@ public final class StoryItemSetContainerComponent: Component {
             
             self.displayLikeReactions = true
             self.tempReactionsGesture = gesture
-            self.state?.updated(transition: Transition(animation: .curve(duration: 0.25, curve: .easeInOut)))
+            self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.25, curve: .easeInOut)))
             self.updateIsProgressPaused()
             self.tempReactionsGesture = nil
         }
@@ -6037,14 +5893,14 @@ public final class StoryItemSetContainerComponent: Component {
                 }
             }
             
-            if !emojiFileIds.isEmpty || hasLinkedStickers, let peerReference = PeerReference(component.slice.peer._asPeer()) {
+            if !emojiFileIds.isEmpty || hasLinkedStickers, let peerReference = PeerReference(component.slice.effectivePeer._asPeer()) {
                 let context = component.context
                 
                 tip = .animatedEmoji(text: nil, arguments: nil, file: nil, action: nil)
                 
                 let packsPromise = Promise<[StickerPackReference]>()
                 if hasLinkedStickers {
-                    packsPromise.set(context.engine.stickers.stickerPacksAttachedToMedia(media: .story(peer: peerReference, id: component.slice.item.storyItem.id, media: media)))
+                    packsPromise.set(context.engine.stickers.stickerPacksAttachedToMedia(media: .story(peer: peerReference, id: component.slice.item.id.id, media: media)))
                 } else {
                     packsPromise.set(.single([]))
                 }
@@ -6156,7 +6012,7 @@ public final class StoryItemSetContainerComponent: Component {
             items.append(.action(ContextMenuActionItem(text: presentationData.strings.Common_Back, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Back"), color: theme.actionSheet.primaryTextColor)
             }, iconPosition: .left, action: { c, _ in
-                c.popItems()
+                c?.popItems()
             })))
 
             items.append(.custom(SliderContextItem(minValue: 0.2, maxValue: 2.5, value: baseRate, valueChanged: { [weak self] newValue, done in
@@ -6168,7 +6024,7 @@ public final class StoryItemSetContainerComponent: Component {
                 }
                 
                 let rate = normalizeValue(newValue)
-                if let visibleItem = self.visibleItems[component.slice.item.storyItem.id], let view = visibleItem.view.view as? StoryItemContentComponent.View {
+                if let visibleItem = self.visibleItems[component.slice.item.id], let view = visibleItem.view.view as? StoryItemContentComponent.View {
                     view.setBaseRate(rate)
                 }
                 
@@ -6198,7 +6054,7 @@ public final class StoryItemSetContainerComponent: Component {
                         return
                     }
                     
-                    if let visibleItem = self.visibleItems[component.slice.item.storyItem.id], let view = visibleItem.view.view as? StoryItemContentComponent.View {
+                    if let visibleItem = self.visibleItems[component.slice.item.id], let view = visibleItem.view.view as? StoryItemContentComponent.View {
                         view.setBaseRate(rate)
                     }
                     component.storyItemSharedState.baseRate = rate
@@ -6247,11 +6103,11 @@ public final class StoryItemSetContainerComponent: Component {
                         return optionsRateImage(rate: speedIconText, isLarge: false, color: theme.contextMenu.primaryColor)
                     }, action: { [weak self] c, _ in
                         guard let self else {
-                            c.dismiss(completion: nil)
+                            c?.dismiss(completion: nil)
                             return
                         }
 
-                        c.pushItems(items: self.contextMenuSpeedItems(value: baseRatePromise) |> map { ContextController.Items(content: .list($0)) })
+                        c?.pushItems(items: self.contextMenuSpeedItems(value: baseRatePromise) |> map { ContextController.Items(content: .list($0)) })
                     })))
                     items.append(.separator)
                 }
@@ -6299,6 +6155,19 @@ public final class StoryItemSetContainerComponent: Component {
                     self.openStoryEditing()
                 })))
                 
+                if case .file = component.slice.item.storyItem.media, component.slice.item.storyItem.isPinned {
+                    items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_EditCover, icon: { theme in
+                        return generateTintedImage(image: UIImage(bundleImageName: "Stories/Context Menu/EditCover"), color: theme.contextMenu.primaryColor)
+                    }, action: { [weak self] _, a in
+                        a(.default)
+                        
+                        guard let self else {
+                            return
+                        }
+                        self.openStoryEditing(cover: true)
+                    })))
+                }
+                
                 items.append(.separator)
 
                 items.append(.action(ContextMenuActionItem(text: component.slice.item.storyItem.isPinned ? component.strings.Story_Context_RemoveFromProfile : component.strings.Story_Context_SaveToProfile, icon: { theme in
@@ -6310,7 +6179,7 @@ public final class StoryItemSetContainerComponent: Component {
                         return
                     }
                     
-                    let _ = component.context.engine.messages.updateStoriesArePinned(peerId: component.slice.peer.id, ids: [component.slice.item.storyItem.id: component.slice.item.storyItem], isPinned: !component.slice.item.storyItem.isPinned).startStandalone()
+                    let _ = component.context.engine.messages.updateStoriesArePinned(peerId: component.slice.effectivePeer.id, ids: [component.slice.item.storyItem.id: component.slice.item.storyItem], isPinned: !component.slice.item.storyItem.isPinned).startStandalone()
                     
                     let presentationData = component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme)
                     if component.slice.item.storyItem.isPinned {
@@ -6346,7 +6215,7 @@ public final class StoryItemSetContainerComponent: Component {
                     self.requestSave()
                 })))
                 
-                if case let .user(accountUser) = component.slice.peer {
+                if case let .user(accountUser) = component.slice.effectivePeer {
                     items.append(.action(ContextMenuActionItem(text: component.strings.Story_ContextStealthMode, icon: { theme in
                         return generateTintedImage(image: UIImage(bundleImageName: accountUser.isPremium ? "Chat/Context Menu/Eye" : "Chat/Context Menu/EyeLocked"), color: theme.contextMenu.primaryColor)
                     }, action: { [weak self] _, a in
@@ -6363,7 +6232,7 @@ public final class StoryItemSetContainerComponent: Component {
                     })))
                 }
                 
-                if component.slice.item.storyItem.isPublic && (component.slice.peer.addressName != nil || !component.slice.peer._asPeer().usernames.isEmpty) && (component.slice.item.storyItem.expirationTimestamp > Int32(Date().timeIntervalSince1970) || component.slice.item.storyItem.isPinned) {
+                if component.slice.item.storyItem.isPublic && (component.slice.effectivePeer.addressName != nil || !component.slice.effectivePeer._asPeer().usernames.isEmpty) && (component.slice.item.storyItem.expirationTimestamp > Int32(Date().timeIntervalSince1970) || component.slice.item.storyItem.isPinned) {
                     items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_CopyLink, icon: { theme in
                         return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Link"), color: theme.contextMenu.primaryColor)
                     }, action: { [weak self] _, a in
@@ -6373,7 +6242,7 @@ public final class StoryItemSetContainerComponent: Component {
                             return
                         }
                         
-                        let _ = (component.context.engine.messages.exportStoryLink(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id)
+                        let _ = (component.context.engine.messages.exportStoryLink(peerId: component.slice.effectivePeer.id, id: component.slice.item.storyItem.id)
                         |> deliverOnMainQueue).startStandalone(next: { [weak self] link in
                             guard let self, let component = self.component else {
                                 return
@@ -6426,7 +6295,7 @@ public final class StoryItemSetContainerComponent: Component {
             guard let component = self.component, let controller = component.controller() else {
                 return
             }
-            guard case let .channel(channel) = component.slice.peer else {
+            guard case let .channel(channel) = component.slice.effectivePeer else {
                 return
             }
             
@@ -6463,11 +6332,11 @@ public final class StoryItemSetContainerComponent: Component {
                         return optionsRateImage(rate: speedIconText, isLarge: false, color: theme.contextMenu.primaryColor)
                     }, action: { [weak self] c, _ in
                         guard let self else {
-                            c.dismiss(completion: nil)
+                            c?.dismiss(completion: nil)
                             return
                         }
 
-                        c.pushItems(items: self.contextMenuSpeedItems(value: baseRatePromise) |> map { ContextController.Items(content: .list($0)) })
+                        c?.pushItems(items: self.contextMenuSpeedItems(value: baseRatePromise) |> map { ContextController.Items(content: .list($0)) })
                     })))
                     items.append(.separator)
                 }
@@ -6483,6 +6352,19 @@ public final class StoryItemSetContainerComponent: Component {
                         }
                         self.openStoryEditing()
                     })))
+                    
+                    if case .file = component.slice.item.storyItem.media, component.slice.item.storyItem.isPinned {
+                        items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_EditCover, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: "Stories/Context Menu/EditCover"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, a in
+                            a(.default)
+                            
+                            guard let self else {
+                                return
+                            }
+                            self.openStoryEditing(cover: true)
+                        })))
+                    }
                 }
                 
                 if !items.isEmpty {
@@ -6499,10 +6381,10 @@ public final class StoryItemSetContainerComponent: Component {
                             return
                         }
                         
-                        let _ = component.context.engine.messages.updateStoriesArePinned(peerId: component.slice.peer.id, ids: [component.slice.item.storyItem.id: component.slice.item.storyItem], isPinned: !component.slice.item.storyItem.isPinned).startStandalone()
+                        let _ = component.context.engine.messages.updateStoriesArePinned(peerId: component.slice.effectivePeer.id, ids: [component.slice.item.storyItem.id: component.slice.item.storyItem], isPinned: !component.slice.item.storyItem.isPinned).startStandalone()
                         
                         var isGroup = false
-                        if case let .channel(channel) = component.slice.peer, case .group = channel.info {
+                        if case let .channel(channel) = component.slice.effectivePeer, case .group = channel.info {
                             isGroup = true
                         }
                         
@@ -6542,7 +6424,7 @@ public final class StoryItemSetContainerComponent: Component {
                         let statsController = component.context.sharedContext.makeStoryStatsController(
                             context: component.context,
                             updatedPresentationData: (presentationData, .single(presentationData)),
-                            peerId: component.slice.peer.id,
+                            peerId: component.slice.effectivePeer.id,
                             storyId: component.slice.item.storyItem.id,
                             storyItem: component.slice.item.storyItem,
                             fromStory: true
@@ -6563,7 +6445,7 @@ public final class StoryItemSetContainerComponent: Component {
                     self.requestSave()
                 })))
                 
-                if component.slice.item.storyItem.isPublic && (component.slice.peer.addressName != nil || !component.slice.peer._asPeer().usernames.isEmpty) && (component.slice.item.storyItem.expirationTimestamp > Int32(Date().timeIntervalSince1970) || component.slice.item.storyItem.isPinned) {
+                if component.slice.item.storyItem.isPublic && (component.slice.effectivePeer.addressName != nil || !component.slice.effectivePeer._asPeer().usernames.isEmpty) && (component.slice.item.storyItem.expirationTimestamp > Int32(Date().timeIntervalSince1970) || component.slice.item.storyItem.isPinned) {
                     items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_CopyLink, icon: { theme in
                         return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Link"), color: theme.contextMenu.primaryColor)
                     }, action: { [weak self] _, a in
@@ -6573,7 +6455,7 @@ public final class StoryItemSetContainerComponent: Component {
                             return
                         }
                         
-                        let _ = (component.context.engine.messages.exportStoryLink(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id)
+                        let _ = (component.context.engine.messages.exportStoryLink(peerId: component.slice.effectivePeer.id, id: component.slice.item.storyItem.id)
                         |> deliverOnMainQueue).startStandalone(next: { [weak self] link in
                             guard let self, let component = self.component else {
                                 return
@@ -6605,7 +6487,7 @@ public final class StoryItemSetContainerComponent: Component {
                 }
                 
                 var isHidden = false
-                if case let .channel(channel) = component.slice.peer, let storiesHidden = channel.storiesHidden {
+                if case let .channel(channel) = component.slice.effectivePeer, let storiesHidden = channel.storiesHidden {
                     isHidden = storiesHidden
                 }
                 items.append(.action(ContextMenuActionItem(text: isHidden ? component.strings.StoryFeed_ContextUnarchive : component.strings.StoryFeed_ContextArchive, icon: { theme in
@@ -6617,20 +6499,20 @@ public final class StoryItemSetContainerComponent: Component {
                         return
                     }
                     
-                    let _ = component.context.engine.peers.updatePeerStoriesHidden(id: component.slice.peer.id, isHidden: !isHidden)
+                    let _ = component.context.engine.peers.updatePeerStoriesHidden(id: component.slice.effectivePeer.id, isHidden: !isHidden)
                     
-                    let text = !isHidden ? component.strings.StoryFeed_TooltipArchive(component.slice.peer.compactDisplayTitle).string : component.strings.StoryFeed_TooltipUnarchive(component.slice.peer.compactDisplayTitle).string
+                    let text = !isHidden ? component.strings.StoryFeed_TooltipArchive(component.slice.effectivePeer.compactDisplayTitle).string : component.strings.StoryFeed_TooltipUnarchive(component.slice.effectivePeer.compactDisplayTitle).string
                     let tooltipScreen = TooltipScreen(
                         context: component.context,
                         account: component.context.account,
                         sharedContext: component.context.sharedContext,
                         text: .markdown(text: text),
                         style: .customBlur(UIColor(rgb: 0x1c1c1c), 0.0),
-                        icon: .peer(peer: component.slice.peer, isStory: true),
+                        icon: .peer(peer: component.slice.effectivePeer, isStory: true),
                         action: TooltipScreen.Action(
                             title: component.strings.Undo_Undo,
                             action: {
-                                component.context.engine.peers.updatePeerStoriesHidden(id: component.slice.peer.id, isHidden: isHidden)
+                                component.context.engine.peers.updatePeerStoriesHidden(id: component.slice.effectivePeer.id, isHidden: isHidden)
                             }
                         ),
                         location: .bottom,
@@ -6732,10 +6614,10 @@ public final class StoryItemSetContainerComponent: Component {
             let _ = (combineLatest(
                 queue: Queue.mainQueue(),
                 component.context.engine.data.get(
-                    TelegramEngine.EngineData.Item.Peer.NotificationSettings(id: component.slice.peer.id),
+                    TelegramEngine.EngineData.Item.Peer.NotificationSettings(id: component.slice.effectivePeer.id),
                     TelegramEngine.EngineData.Item.NotificationSettings.Global(),
                     TelegramEngine.EngineData.Item.Contacts.Top(),
-                    TelegramEngine.EngineData.Item.Peer.IsContact(id: component.slice.peer.id),
+                    TelegramEngine.EngineData.Item.Peer.IsContact(id: component.slice.effectivePeer.id),
                     TelegramEngine.EngineData.Item.Peer.Peer(id: component.context.account.peerId)
                 ),
                 translationSettings,
@@ -6757,346 +6639,394 @@ public final class StoryItemSetContainerComponent: Component {
                 let presentationData = component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme)
                 var items: [ContextMenuItem] = []
                 
-                if case .file = component.slice.item.storyItem.media {
-                    var speedValue: String = presentationData.strings.PlaybackSpeed_Normal
-                    var speedIconText: String = "1x"
-                    var didSetSpeedValue = false
-                    for (text, iconText, speed) in speedList(strings: presentationData.strings) {
-                        if abs(speed - baseRate) < 0.01 {
-                            speedValue = text
-                            speedIconText = iconText
-                            didSetSpeedValue = true
-                            break
-                        }
-                    }
-                    if !didSetSpeedValue && baseRate != 1.0 {
-                        speedValue = String(format: "%.1fx", baseRate)
-                        speedIconText = speedValue
-                    }
-                    
-                    items.append(.action(ContextMenuActionItem(text: presentationData.strings.PlaybackSpeed_Title, textLayout: .secondLineWithValue(speedValue), icon: { theme in
-                        return optionsRateImage(rate: speedIconText, isLarge: false, color: theme.contextMenu.primaryColor)
-                    }, action: { [weak self] c, _ in
-                        guard let self else {
-                            c.dismiss(completion: nil)
-                            return
-                        }
-
-                        c.pushItems(items: self.contextMenuSpeedItems(value: baseRatePromise) |> map { ContextController.Items(content: .list($0)) })
-                    })))
-                    items.append(.separator)
-                }
-                
-                let isMuted = resolvedAreStoriesMuted(globalSettings: globalSettings._asGlobalNotificationSettings(), peer: component.slice.peer._asPeer(), peerSettings: settings._asNotificationSettings(), topSearchPeers: topSearchPeers)
-                
-                if !component.slice.peer.isService && isContact {
-                    items.append(.action(ContextMenuActionItem(text: isMuted ? component.strings.StoryFeed_ContextNotifyOn : component.strings.StoryFeed_ContextNotifyOff, icon: { theme in
-                        return generateTintedImage(image: UIImage(bundleImageName: component.slice.additionalPeerData.isMuted ? "Chat/Context Menu/Unmute" : "Chat/Context Menu/Muted"), color: theme.contextMenu.primaryColor)
-                    }, action: { [weak self] _, a in
-                        a(.default)
-                        
-                        guard let self, let component = self.component else {
-                            return
-                        }
-                        
-                        let _ = component.context.engine.peers.togglePeerStoriesMuted(peerId: component.slice.peer.id).startStandalone()
-                        
-                        let iconColor = UIColor.white
-                        let presentationData = component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme)
-                        if isMuted {
-                            self.component?.presentController(UndoOverlayController(
-                                presentationData: presentationData,
-                                content: .universal(animation: "anim_profileunmute", scale: 0.075, colors: [
-                                    "Middle.Group 1.Fill 1": iconColor,
-                                    "Top.Group 1.Fill 1": iconColor,
-                                    "Bottom.Group 1.Fill 1": iconColor,
-                                    "EXAMPLE.Group 1.Fill 1": iconColor,
-                                    "Line.Group 1.Stroke 1": iconColor
-                                ], title: nil, text: component.strings.StoryFeed_TooltipNotifyOn(component.slice.peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)).string, customUndoText: nil, timeout: nil),
-                                elevatedLayout: false,
-                                animateInAsReplacement: false,
-                                blurred: true,
-                                action: { _ in return false }
-                            ), nil)
-                        } else {
-                            self.component?.presentController(UndoOverlayController(
-                                presentationData: presentationData,
-                                content: .universal(animation: "anim_profilemute", scale: 0.075, colors: [
-                                    "Middle.Group 1.Fill 1": iconColor,
-                                    "Top.Group 1.Fill 1": iconColor,
-                                    "Bottom.Group 1.Fill 1": iconColor,
-                                    "EXAMPLE.Group 1.Fill 1": iconColor,
-                                    "Line.Group 1.Stroke 1": iconColor
-                                ], title: nil, text: component.strings.StoryFeed_TooltipNotifyOff(component.slice.peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)).string, customUndoText: nil, timeout: nil),
-                                elevatedLayout: false,
-                                animateInAsReplacement: false,
-                                blurred: true,
-                                action: { _ in return false }
-                            ), nil)
-                        }
-                    })))
-                }
-                
-                if !component.slice.peer.isService && component.slice.item.storyItem.isPublic && (component.slice.peer.addressName != nil || !component.slice.peer._asPeer().usernames.isEmpty) {
-                    items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_CopyLink, icon: { theme in
-                        return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Link"), color: theme.contextMenu.primaryColor)
-                    }, action: { [weak self] _, a in
-                        a(.default)
-                        
-                        guard let self, let component = self.component else {
-                            return
-                        }
-                        
-                        let _ = (component.context.engine.messages.exportStoryLink(peerId: component.slice.peer.id, id: component.slice.item.storyItem.id)
-                        |> deliverOnMainQueue).startStandalone(next: { [weak self] link in
+                if case let .user(user) = component.slice.peer, let botInfo = user.botInfo {
+                    if botInfo.flags.contains(.canEdit) {
+                        items.append(.action(ContextMenuActionItem(text: presentationData.strings.BotPreviews_MenuReorder, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/ReorderItems"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, a in
+                            a(.default)
+                            
                             guard let self, let component = self.component else {
                                 return
                             }
-                            if let link {
-                                UIPasteboard.general.string = link
-                                
-                                component.presentController(UndoOverlayController(
+                            
+                            component.reorder()
+                        })))
+                        items.append(.action(ContextMenuActionItem(text: presentationData.strings.Common_Delete, textColor: .destructive, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.contextMenu.destructiveColor)
+                        }, action: { [weak self] _, a in
+                            a(.default)
+                            
+                            guard let self else {
+                                return
+                            }
+                            self.performDeleteAction()
+                        })))
+                    }
+                } else {
+                    if case .file = component.slice.item.storyItem.media {
+                        var speedValue: String = presentationData.strings.PlaybackSpeed_Normal
+                        var speedIconText: String = "1x"
+                        var didSetSpeedValue = false
+                        for (text, iconText, speed) in speedList(strings: presentationData.strings) {
+                            if abs(speed - baseRate) < 0.01 {
+                                speedValue = text
+                                speedIconText = iconText
+                                didSetSpeedValue = true
+                                break
+                            }
+                        }
+                        if !didSetSpeedValue && baseRate != 1.0 {
+                            speedValue = String(format: "%.1fx", baseRate)
+                            speedIconText = speedValue
+                        }
+                        
+                        items.append(.action(ContextMenuActionItem(text: presentationData.strings.PlaybackSpeed_Title, textLayout: .secondLineWithValue(speedValue), icon: { theme in
+                            return optionsRateImage(rate: speedIconText, isLarge: false, color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] c, _ in
+                            guard let self else {
+                                c?.dismiss(completion: nil)
+                                return
+                            }
+                            
+                            c?.pushItems(items: self.contextMenuSpeedItems(value: baseRatePromise) |> map { ContextController.Items(content: .list($0)) })
+                        })))
+                        items.append(.separator)
+                    }
+                    
+                    let isMuted = resolvedAreStoriesMuted(globalSettings: globalSettings._asGlobalNotificationSettings(), peer: component.slice.effectivePeer._asPeer(), peerSettings: settings._asNotificationSettings(), topSearchPeers: topSearchPeers)
+                    
+                    if !component.slice.effectivePeer.isService && isContact {
+                        items.append(.action(ContextMenuActionItem(text: isMuted ? component.strings.StoryFeed_ContextNotifyOn : component.strings.StoryFeed_ContextNotifyOff, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: component.slice.additionalPeerData.isMuted ? "Chat/Context Menu/Unmute" : "Chat/Context Menu/Muted"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, a in
+                            a(.default)
+                            
+                            guard let self, let component = self.component else {
+                                return
+                            }
+                            
+                            let _ = component.context.engine.peers.togglePeerStoriesMuted(peerId: component.slice.effectivePeer.id).startStandalone()
+                            
+                            let iconColor = UIColor.white
+                            let presentationData = component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme)
+                            if isMuted {
+                                self.component?.presentController(UndoOverlayController(
                                     presentationData: presentationData,
-                                    content: .linkCopied(text: component.strings.Story_ToastLinkCopied),
+                                    content: .universal(animation: "anim_profileunmute", scale: 0.075, colors: [
+                                        "Middle.Group 1.Fill 1": iconColor,
+                                        "Top.Group 1.Fill 1": iconColor,
+                                        "Bottom.Group 1.Fill 1": iconColor,
+                                        "EXAMPLE.Group 1.Fill 1": iconColor,
+                                        "Line.Group 1.Stroke 1": iconColor
+                                    ], title: nil, text: component.strings.StoryFeed_TooltipNotifyOn(component.slice.effectivePeer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)).string, customUndoText: nil, timeout: nil),
+                                    elevatedLayout: false,
+                                    animateInAsReplacement: false,
+                                    blurred: true,
+                                    action: { _ in return false }
+                                ), nil)
+                            } else {
+                                self.component?.presentController(UndoOverlayController(
+                                    presentationData: presentationData,
+                                    content: .universal(animation: "anim_profilemute", scale: 0.075, colors: [
+                                        "Middle.Group 1.Fill 1": iconColor,
+                                        "Top.Group 1.Fill 1": iconColor,
+                                        "Bottom.Group 1.Fill 1": iconColor,
+                                        "EXAMPLE.Group 1.Fill 1": iconColor,
+                                        "Line.Group 1.Stroke 1": iconColor
+                                    ], title: nil, text: component.strings.StoryFeed_TooltipNotifyOff(component.slice.effectivePeer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)).string, customUndoText: nil, timeout: nil),
                                     elevatedLayout: false,
                                     animateInAsReplacement: false,
                                     blurred: true,
                                     action: { _ in return false }
                                 ), nil)
                             }
-                        })
-                    })))
-                }
-                
-                if !component.slice.item.storyItem.isMy, case let .file(file) = component.slice.item.storyItem.media, file.isVideo {
-                    let isHq = component.slice.additionalPeerData.preferHighQualityStories
-                    items.append(.action(ContextMenuActionItem(text: isHq ? component.strings.Story_ContextMenuSD : component.strings.Story_ContextMenuHD, icon: { theme in
-                        if isHq {
-                            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/QualitySd"), color: theme.contextMenu.primaryColor)
-                        } else {
-                            return generateTintedImage(image: UIImage(bundleImageName: accountUser.isPremium ? "Chat/Context Menu/QualityHd" : "Chat/Context Menu/QualityHdLocked"), color: theme.contextMenu.primaryColor)
-                        }
-                    }, action: { [weak self] _, a in
-                        a(.default)
-                        
-                        guard let self, let component = self.component, let controller = component.controller() else {
-                            return
-                        }
-                        
-                        if !component.slice.additionalPeerData.preferHighQualityStories && !accountUser.isPremium {
-                            self.presentQualityUpgradeScreen()
-                            
-                            return
-                        }
-                        
-                        let presentationData = component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme)
-                        let title: String
-                        let text: String
-                        if component.slice.additionalPeerData.preferHighQualityStories {
-                            title = component.strings.Story_ToastQualitySD_Title
-                            text = component.strings.Story_ToastQualitySD_Text
-                        } else {
-                            title = component.strings.Story_ToastQualityHD_Title
-                            text = component.strings.Story_ToastQualityHD_Text
-                        }
-                        controller.present(UndoOverlayController(
-                            presentationData: presentationData,
-                            content: .info(title: title, text: text, timeout: nil, customUndoText: nil),
-                            elevatedLayout: false,
-                            animateInAsReplacement: false,
-                            blurred: true,
-                            action: { _ in return false }
-                        ), in: .current)
-                        
-                        let _ = updateMediaDownloadSettingsInteractively(accountManager: component.context.sharedContext.accountManager, { settings in
-                            var settings = settings
-                            settings.highQualityStories = !isHq
-                            return settings
-                        }).startStandalone()
-                    })))
-                }
-                
-                var isHidden = false
-                if case let .user(user) = component.slice.peer, let storiesHidden = user.storiesHidden {
-                    isHidden = storiesHidden
-                } else if case let .channel(channel) = component.slice.peer, let storiesHidden = channel.storiesHidden {
-                    isHidden = storiesHidden
-                }
-                
-                var canArchive = false
-                if isHidden {
-                    canArchive = true
-                } else {
-                    if case .user = component.slice.peer, !component.slice.peer.isService {
-                        canArchive = true
-                    } else if case .channel = component.slice.peer {
-                        canArchive = true
+                        })))
                     }
-                }
-                
-                if canArchive {
-                    items.append(.action(ContextMenuActionItem(text: isHidden ? component.strings.StoryFeed_ContextUnarchive : component.strings.StoryFeed_ContextArchive, icon: { theme in
-                        return generateTintedImage(image: UIImage(bundleImageName: isHidden ? "Chat/Context Menu/Unarchive" : "Chat/Context Menu/Archive"), color: theme.contextMenu.primaryColor)
-                    }, action: { [weak self] _, a in
-                        a(.default)
-                        
-                        guard let self, let component = self.component else {
-                            return
-                        }
-                        
-                        let _ = component.context.engine.peers.updatePeerStoriesHidden(id: component.slice.peer.id, isHidden: !isHidden)
-                        
-                        let text = !isHidden ? component.strings.StoryFeed_TooltipArchive(component.slice.peer.compactDisplayTitle).string : component.strings.StoryFeed_TooltipUnarchive(component.slice.peer.compactDisplayTitle).string
-                        let tooltipScreen = TooltipScreen(
-                            context: component.context,
-                            account: component.context.account,
-                            sharedContext: component.context.sharedContext,
-                            text: .markdown(text: text),
-                            style: .customBlur(UIColor(rgb: 0x1c1c1c), 0.0),
-                            icon: .peer(peer: component.slice.peer, isStory: true),
-                            action: TooltipScreen.Action(
-                                title: component.strings.Undo_Undo,
-                                action: {
-                                    component.context.engine.peers.updatePeerStoriesHidden(id: component.slice.peer.id, isHidden: isHidden)
-                                }
-                            ),
-                            location: .bottom,
-                            shouldDismissOnTouch: { _, _ in return .dismiss(consume: false) }
-                        )
-                        tooltipScreen.willBecomeDismissed = { [weak self] _ in
-                            guard let self else {
-                                return
-                            }
-                            self.sendMessageContext.tooltipScreen = nil
-                            self.updateIsProgressPaused()
-                        }
-                        self.sendMessageContext.tooltipScreen?.dismiss()
-                        self.sendMessageContext.tooltipScreen = tooltipScreen
-                        self.updateIsProgressPaused()
-                        component.controller()?.present(tooltipScreen, in: .current)
-                    })))
-                }
-                
-                if !component.slice.item.storyItem.isForwardingDisabled {
-                    let saveText: String = component.strings.Story_Context_SaveToGallery
-                    items.append(.action(ContextMenuActionItem(text: saveText, icon: { theme in
-                        return generateTintedImage(image: UIImage(bundleImageName: accountUser.isPremium ? "Chat/Context Menu/Download" : "Chat/Context Menu/DownloadLocked"), color: theme.contextMenu.primaryColor)
-                    }, action: { [weak self] _, a in
-                        a(.default)
-                        
-                        guard let self else {
-                            return
-                        }
-                        
-                        if accountUser.isPremium {
-                            self.requestSave()
-                        } else {
-                            self.presentSaveUpgradeScreen()
-                        }
-                    })))
-                }
-                
-                if case .user = component.slice.peer {
-                    items.append(.action(ContextMenuActionItem(text: component.strings.Story_ContextStealthMode, icon: { theme in
-                        return generateTintedImage(image: UIImage(bundleImageName: accountUser.isPremium ? "Chat/Context Menu/Eye" : "Chat/Context Menu/EyeLocked"), color: theme.contextMenu.primaryColor)
-                    }, action: { [weak self] _, a in
-                        a(.default)
-                        
-                        guard let self else {
-                            return
-                        }
-                        if accountUser.isPremium {
-                            self.sendMessageContext.requestStealthMode(view: self)
-                        } else {
-                            self.presentStealthModeUpgradeScreen()
-                        }
-                    })))
-                }
-                
-                if component.slice.additionalPeerData.canViewStats {
-                    items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_ViewStats, icon: { theme in
-                        return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Statistics"), color: theme.contextMenu.primaryColor)
-                    }, action: { [weak self] _, a in
-                        a(.default)
-                        
-                        guard let self, let component = self.component else {
-                            return
-                        }
-                        let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }.withUpdated(theme: defaultDarkColorPresentationTheme)
-                        let statsController = component.context.sharedContext.makeStoryStatsController(
-                            context: component.context,
-                            updatedPresentationData: (presentationData, .single(presentationData)),
-                            peerId: component.slice.peer.id,
-                            storyId: component.slice.item.storyItem.id,
-                            storyItem: component.slice.item.storyItem,
-                            fromStory: true
-                        )
-                        component.controller()?.push(statsController)
-                    })))
-                }
-                
-                if !component.slice.item.storyItem.text.isEmpty {
-                    let (canTranslate, _) = canTranslateText(context: component.context, text: component.slice.item.storyItem.text, showTranslate: translationSettings.showTranslate, showTranslateIfTopical: false, ignoredLanguages: translationSettings.ignoredLanguages)
-                    if canTranslate {
-                        items.append(.action(ContextMenuActionItem(text: component.strings.Conversation_ContextMenuTranslate, icon: { theme in
-                            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Translate"), color: theme.actionSheet.primaryTextColor)
-                        }, action: { [weak self] _, f in
-                            f(.default)
+                    
+                    if !component.slice.effectivePeer.isService && component.slice.item.storyItem.isPublic && (component.slice.effectivePeer.addressName != nil || !component.slice.effectivePeer._asPeer().usernames.isEmpty) {
+                        items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_CopyLink, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Link"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, a in
+                            a(.default)
                             
                             guard let self, let component = self.component else {
                                 return
                             }
-                            self.sendMessageContext.performTranslateTextAction(view: self, text: component.slice.item.storyItem.text)
+                            
+                            let _ = (component.context.engine.messages.exportStoryLink(peerId: component.slice.effectivePeer.id, id: component.slice.item.storyItem.id)
+                                     |> deliverOnMainQueue).startStandalone(next: { [weak self] link in
+                                guard let self, let component = self.component else {
+                                    return
+                                }
+                                if let link {
+                                    UIPasteboard.general.string = link
+                                    
+                                    component.presentController(UndoOverlayController(
+                                        presentationData: presentationData,
+                                        content: .linkCopied(text: component.strings.Story_ToastLinkCopied),
+                                        elevatedLayout: false,
+                                        animateInAsReplacement: false,
+                                        blurred: true,
+                                        action: { _ in return false }
+                                    ), nil)
+                                }
+                            })
                         })))
                     }
-                }
-                
-                if !component.slice.peer.isService {
-                    items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_Report, icon: { theme in
-                        return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Report"), color: theme.contextMenu.primaryColor)
-                    }, action: { [weak self] c, a in
-                        guard let self, let component = self.component, let controller = component.controller() else {
-                            return
+                    
+                    if !component.slice.item.storyItem.isMy, case let .file(file) = component.slice.item.storyItem.media, file.isVideo {
+                        let isHq = component.slice.additionalPeerData.preferHighQualityStories
+                        items.append(.action(ContextMenuActionItem(text: isHq ? component.strings.Story_ContextMenuSD : component.strings.Story_ContextMenuHD, icon: { theme in
+                            if isHq {
+                                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/QualitySd"), color: theme.contextMenu.primaryColor)
+                            } else {
+                                return generateTintedImage(image: UIImage(bundleImageName: accountUser.isPremium ? "Chat/Context Menu/QualityHd" : "Chat/Context Menu/QualityHdLocked"), color: theme.contextMenu.primaryColor)
+                            }
+                        }, action: { [weak self] _, a in
+                            a(.default)
+                            
+                            guard let self, let component = self.component, let controller = component.controller() else {
+                                return
+                            }
+                            
+                            if !component.slice.additionalPeerData.preferHighQualityStories && !accountUser.isPremium {
+                                self.presentQualityUpgradeScreen()
+                                
+                                return
+                            }
+                            
+                            let presentationData = component.context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: component.theme)
+                            let title: String
+                            let text: String
+                            if component.slice.additionalPeerData.preferHighQualityStories {
+                                title = component.strings.Story_ToastQualitySD_Title
+                                text = component.strings.Story_ToastQualitySD_Text
+                            } else {
+                                title = component.strings.Story_ToastQualityHD_Title
+                                text = component.strings.Story_ToastQualityHD_Text
+                            }
+                            controller.present(UndoOverlayController(
+                                presentationData: presentationData,
+                                content: .info(title: title, text: text, timeout: nil, customUndoText: nil),
+                                elevatedLayout: false,
+                                animateInAsReplacement: false,
+                                blurred: true,
+                                action: { _ in return false }
+                            ), in: .current)
+                            
+                            let _ = updateMediaDownloadSettingsInteractively(accountManager: component.context.sharedContext.accountManager, { settings in
+                                var settings = settings
+                                settings.highQualityStories = !isHq
+                                return settings
+                            }).startStandalone()
+                        })))
+                    }
+                    
+                    var isHidden = false
+                    if case let .user(user) = component.slice.effectivePeer, let storiesHidden = user.storiesHidden {
+                        isHidden = storiesHidden
+                    } else if case let .channel(channel) = component.slice.effectivePeer, let storiesHidden = channel.storiesHidden {
+                        isHidden = storiesHidden
+                    }
+                    
+                    var canArchive = false
+                    if isHidden {
+                        canArchive = true
+                    } else {
+                        if case .user = component.slice.effectivePeer, !component.slice.effectivePeer.isService {
+                            canArchive = true
+                        } else if case .channel = component.slice.effectivePeer {
+                            canArchive = true
                         }
-                        
-                        let options: [PeerReportOption] = [.spam, .violence, .pornography, .childAbuse, .copyright, .illegalDrugs, .personalDetails, .other]
-                        presentPeerReportOptions(
-                            context: component.context,
-                            parent: controller,
-                            contextController: c,
-                            backAction: { _ in },
-                            subject: .story(component.slice.peer.id, component.slice.item.storyItem.id),
-                            options: options,
-                            passthrough: true,
-                            forceTheme: defaultDarkPresentationTheme,
-                            isDetailedReportingVisible: { [weak self] isReporting in
+                    }
+                    
+                    if canArchive {
+                        items.append(.action(ContextMenuActionItem(text: isHidden ? component.strings.StoryFeed_ContextUnarchive : component.strings.StoryFeed_ContextArchive, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: isHidden ? "Chat/Context Menu/Unarchive" : "Chat/Context Menu/Archive"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, a in
+                            a(.default)
+                            
+                            guard let self, let component = self.component else {
+                                return
+                            }
+                            
+                            let _ = component.context.engine.peers.updatePeerStoriesHidden(id: component.slice.effectivePeer.id, isHidden: !isHidden)
+                            
+                            let text = !isHidden ? component.strings.StoryFeed_TooltipArchive(component.slice.effectivePeer.compactDisplayTitle).string : component.strings.StoryFeed_TooltipUnarchive(component.slice.effectivePeer.compactDisplayTitle).string
+                            let tooltipScreen = TooltipScreen(
+                                context: component.context,
+                                account: component.context.account,
+                                sharedContext: component.context.sharedContext,
+                                text: .markdown(text: text),
+                                style: .customBlur(UIColor(rgb: 0x1c1c1c), 0.0),
+                                icon: .peer(peer: component.slice.effectivePeer, isStory: true),
+                                action: TooltipScreen.Action(
+                                    title: component.strings.Undo_Undo,
+                                    action: {
+                                        component.context.engine.peers.updatePeerStoriesHidden(id: component.slice.effectivePeer.id, isHidden: isHidden)
+                                    }
+                                ),
+                                location: .bottom,
+                                shouldDismissOnTouch: { _, _ in return .dismiss(consume: false) }
+                            )
+                            tooltipScreen.willBecomeDismissed = { [weak self] _ in
                                 guard let self else {
                                     return
                                 }
-                                self.isReporting = isReporting
+                                self.sendMessageContext.tooltipScreen = nil
                                 self.updateIsProgressPaused()
-                            },
-                            completion: { [weak self] reason, _ in
-                                guard let self, let component = self.component, let controller = component.controller(), let reason else {
+                            }
+                            self.sendMessageContext.tooltipScreen?.dismiss()
+                            self.sendMessageContext.tooltipScreen = tooltipScreen
+                            self.updateIsProgressPaused()
+                            component.controller()?.present(tooltipScreen, in: .current)
+                        })))
+                    }
+                    
+                    if !component.slice.item.storyItem.isForwardingDisabled {
+                        let saveText: String = component.strings.Story_Context_SaveToGallery
+                        items.append(.action(ContextMenuActionItem(text: saveText, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: accountUser.isPremium ? "Chat/Context Menu/Download" : "Chat/Context Menu/DownloadLocked"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, a in
+                            a(.default)
+                            
+                            guard let self else {
+                                return
+                            }
+                            
+                            if accountUser.isPremium {
+                                self.requestSave()
+                            } else {
+                                self.presentSaveUpgradeScreen()
+                            }
+                        })))
+                    }
+                    
+                    if case .user = component.slice.effectivePeer {
+                        items.append(.action(ContextMenuActionItem(text: component.strings.Story_ContextStealthMode, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: accountUser.isPremium ? "Chat/Context Menu/Eye" : "Chat/Context Menu/EyeLocked"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, a in
+                            a(.default)
+                            
+                            guard let self else {
+                                return
+                            }
+                            if accountUser.isPremium {
+                                self.sendMessageContext.requestStealthMode(view: self)
+                            } else {
+                                self.presentStealthModeUpgradeScreen()
+                            }
+                        })))
+                    }
+                    
+                    if component.slice.additionalPeerData.canViewStats {
+                        items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_ViewStats, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Statistics"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, a in
+                            a(.default)
+                            
+                            guard let self, let component = self.component else {
+                                return
+                            }
+                            let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }.withUpdated(theme: defaultDarkColorPresentationTheme)
+                            let statsController = component.context.sharedContext.makeStoryStatsController(
+                                context: component.context,
+                                updatedPresentationData: (presentationData, .single(presentationData)),
+                                peerId: component.slice.effectivePeer.id,
+                                storyId: component.slice.item.storyItem.id,
+                                storyItem: component.slice.item.storyItem,
+                                fromStory: true
+                            )
+                            component.controller()?.push(statsController)
+                        })))
+                    }
+                    
+                    if !component.slice.item.storyItem.text.isEmpty {
+                        let (canTranslate, _) = canTranslateText(context: component.context, text: component.slice.item.storyItem.text, showTranslate: translationSettings.showTranslate, showTranslateIfTopical: false, ignoredLanguages: translationSettings.ignoredLanguages)
+                        if canTranslate {
+                            items.append(.action(ContextMenuActionItem(text: component.strings.Conversation_ContextMenuTranslate, icon: { theme in
+                                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Translate"), color: theme.actionSheet.primaryTextColor)
+                            }, action: { [weak self] _, f in
+                                f(.default)
+                                
+                                guard let self, let component = self.component else {
                                     return
                                 }
-                                let _ = component.context.engine.peers.reportPeerStory(peerId: component.slice.peer.id, storyId: component.slice.item.storyItem.id, reason: reason, message: "").startStandalone()
-                                controller.present(
-                                    UndoOverlayController(
-                                        presentationData: presentationData,
-                                        content: .emoji(
-                                            name: "PoliceCar",
-                                            text: presentationData.strings.Report_Succeed
-                                        ),
-                                        elevatedLayout: false,
-                                        blurred: true,
-                                        action: { _ in return false }
-                                    )
-                                    , in: .current
-                                )
+                                self.sendMessageContext.performTranslateTextAction(view: self, text: component.slice.item.storyItem.text, entities: component.slice.item.storyItem.entities)
+                            })))
+                        }
+                    }
+                    
+                    if !component.slice.effectivePeer.isService {
+                        items.append(.action(ContextMenuActionItem(text: component.strings.Story_Context_Report, icon: { theme in
+                            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Report"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, f in
+                            guard let self, let component = self.component, let controller = component.controller() else {
+                                return
                             }
-                        )
-                    })))
+                            
+                            f(.default)
+                            
+                            self.isReporting = true
+                            self.updateIsProgressPaused()
+                            
+                            component.context.sharedContext.makeContentReportScreen(
+                                context: component.context,
+                                subject: .stories(component.slice.effectivePeer.id, [component.slice.item.storyItem.id]),
+                                forceDark: true,
+                                present: { c in
+                                    controller.push(c)
+                                },
+                                completion: { [weak self] in
+                                    guard let self else {
+                                        return
+                                    }
+                                    self.isReporting = false
+                                    self.updateIsProgressPaused()
+                                },
+                                requestSelectMessages: nil
+                            )
+                            
+//                            let options: [PeerReportOption] = [.spam, .violence, .pornography, .childAbuse, .copyright, .illegalDrugs, .personalDetails, .other]
+//                            presentPeerReportOptions(
+//                                context: component.context,
+//                                parent: controller,
+//                                contextController: c,
+//                                backAction: { _ in },
+//                                subject: .story(component.slice.effectivePeer.id, component.slice.item.storyItem.id),
+//                                options: options,
+//                                passthrough: true,
+//                                forceTheme: defaultDarkPresentationTheme,
+//                                isDetailedReportingVisible: { [weak self] isReporting in
+//                                    guard let self else {
+//                                        return
+//                                    }
+//                                    self.isReporting = isReporting
+//                                    self.updateIsProgressPaused()
+//                                },
+//                                completion: { [weak self] reason, _ in
+//                                    guard let self, let component = self.component, let controller = component.controller(), let reason else {
+//                                        return
+//                                    }
+//                                    let _ = component.context.engine.peers.reportPeerStory(peerId: component.slice.effectivePeer.id, storyId: component.slice.item.storyItem.id, reason: reason, message: "").startStandalone()
+//                                    controller.present(
+//                                        UndoOverlayController(
+//                                            presentationData: presentationData,
+//                                            content: .emoji(
+//                                                name: "PoliceCar",
+//                                                text: presentationData.strings.Report_Succeed
+//                                            ),
+//                                            elevatedLayout: false,
+//                                            blurred: true,
+//                                            action: { _ in return false }
+//                                        )
+//                                        , in: .current
+//                                    )
+//                                }
+//                            )
+                        })))
+                    }
                 }
                 
                 let (tip, tipSignal) = self.getLinkedStickerPacks()
@@ -7197,7 +7127,7 @@ public final class StoryItemSetContainerComponent: Component {
         return View(frame: CGRect())
     }
     
-    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
         return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
     }
 }
@@ -7242,7 +7172,7 @@ final class ListContextExtractedContentSource: ContextExtractedContentSource {
 }
 
 
-private func generateParabollicMotionKeyframes(from sourcePoint: CGPoint, to targetPosition: CGPoint, elevation: CGFloat, duration: Double, curve: Transition.Animation.Curve, reverse: Bool) -> [CGPoint] {
+private func generateParabollicMotionKeyframes(from sourcePoint: CGPoint, to targetPosition: CGPoint, elevation: CGFloat, duration: Double, curve: ComponentTransition.Animation.Curve, reverse: Bool) -> [CGPoint] {
     let midPoint = CGPoint(x: (sourcePoint.x + targetPosition.x) / 2.0, y: sourcePoint.y - elevation)
     
     let x1 = sourcePoint.x

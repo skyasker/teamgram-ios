@@ -14,7 +14,7 @@ private func copyOrMoveResourceData(from fromResource: MediaResource, to toResou
     }
 }
 
-func applyMediaResourceChanges(from: Media, to: Media, postbox: Postbox, force: Bool) {
+func applyMediaResourceChanges(from: Media, to: Media, postbox: Postbox, force: Bool, skipPreviews: Bool = false) {
     if let fromImage = from as? TelegramMediaImage, let toImage = to as? TelegramMediaImage {
         let fromSmallestRepresentation = smallestImageRepresentation(fromImage.representations)
         if let fromSmallestRepresentation = fromSmallestRepresentation, let toSmallestRepresentation = smallestImageRepresentation(toImage.representations) {
@@ -32,11 +32,13 @@ func applyMediaResourceChanges(from: Media, to: Media, postbox: Postbox, force: 
             }
         }
     } else if let fromFile = from as? TelegramMediaFile, let toFile = to as? TelegramMediaFile {
-        if let fromPreview = smallestImageRepresentation(fromFile.previewRepresentations), let toPreview = smallestImageRepresentation(toFile.previewRepresentations) {
-            copyOrMoveResourceData(from: fromPreview.resource, to: toPreview.resource, mediaBox: postbox.mediaBox)
-        }
-        if let fromVideoThumbnail = fromFile.videoThumbnails.first, let toVideoThumbnail = toFile.videoThumbnails.first, fromVideoThumbnail.resource.id != toVideoThumbnail.resource.id {
-            copyOrMoveResourceData(from: fromVideoThumbnail.resource, to: toVideoThumbnail.resource, mediaBox: postbox.mediaBox)
+        if !skipPreviews {
+            if let fromPreview = smallestImageRepresentation(fromFile.previewRepresentations), let toPreview = smallestImageRepresentation(toFile.previewRepresentations) {
+                copyOrMoveResourceData(from: fromPreview.resource, to: toPreview.resource, mediaBox: postbox.mediaBox)
+            }
+            if let fromVideoThumbnail = fromFile.videoThumbnails.first, let toVideoThumbnail = toFile.videoThumbnails.first, fromVideoThumbnail.resource.id != toVideoThumbnail.resource.id {
+                copyOrMoveResourceData(from: fromVideoThumbnail.resource, to: toVideoThumbnail.resource, mediaBox: postbox.mediaBox)
+            }
         }
         let videoFirstFrameFromPath = postbox.mediaBox.cachedRepresentationCompletePath(fromFile.resource.id, keepDuration: .general, representationId: "first-frame")
         let videoFirstFrameToPath = postbox.mediaBox.cachedRepresentationCompletePath(toFile.resource.id, keepDuration: .general, representationId: "first-frame")
@@ -46,6 +48,12 @@ func applyMediaResourceChanges(from: Media, to: Media, postbox: Postbox, force: 
         
         if (force || fromFile.size == toFile.size || fromFile.resource.size == toFile.resource.size) && fromFile.mimeType == toFile.mimeType {
             copyOrMoveResourceData(from: fromFile.resource, to: toFile.resource, mediaBox: postbox.mediaBox)
+        }
+    } else if let fromPaidContent = from as? TelegramMediaPaidContent, let toPaidContent = to as? TelegramMediaPaidContent {
+        for (fromMedia, toMedia) in zip(fromPaidContent.extendedMedia, toPaidContent.extendedMedia) {
+            if case let .full(fullFromMedia) = fromMedia, case let .full(fullToMedia) = toMedia {
+                applyMediaResourceChanges(from: fullFromMedia, to: fullToMedia, postbox: postbox, force: force)
+            }
         }
     }
 }
@@ -96,7 +104,7 @@ func applyUpdateMessage(postbox: Postbox, stateManager: AccountStateManager, mes
         var updatedTimestamp: Int32?
         if let apiMessage = apiMessage {
             switch apiMessage {
-                case let .message(_, _, _, _, _, _, _, _, _, _, _, date, _, _, _, _, _, _, _, _, _, _, _, _, _, _):
+                case let .message(_, _, _, _, _, _, _, _, _, _, _, date, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _):
                     updatedTimestamp = date
                 case .messageEmpty:
                     break

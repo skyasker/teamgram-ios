@@ -121,11 +121,11 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
                         controller.updateTextInputState(updateTextInputState)
                     }
                     var popAndComplete = true
-                    if let subject = params.subject, case let .message(messageSubject, highlight, timecode) = subject {
+                    if let subject = params.subject, case let .message(messageSubject, highlight, timecode, setupReply) = subject {
                         if case let .id(messageId) = messageSubject {
                             let navigationController = params.navigationController
                             let animated = params.animated
-                            controller.navigateToMessage(messageLocation: .id(messageId, NavigateToMessageParams(timestamp: timecode, quote: (highlight?.quote).flatMap { quote in NavigateToMessageParams.Quote(string: quote.string, offset: quote.offset) })), animated: isFirst, completion: { [weak navigationController, weak controller] in
+                            controller.navigateToMessage(messageLocation: .id(messageId, NavigateToMessageParams(timestamp: timecode, quote: (highlight?.quote).flatMap { quote in NavigateToMessageParams.Quote(string: quote.string, offset: quote.offset) }, setupReply: setupReply)), animated: isFirst, completion: { [weak navigationController, weak controller] in
                                 if let navigationController = navigationController, let controller = controller {
                                     let _ = navigationController.popToViewController(controller, animated: animated)
                                 }
@@ -165,7 +165,7 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
                         controller.presentAttachmentBot(botId: attachBotStart.botId, payload: attachBotStart.payload, justInstalled: attachBotStart.justInstalled)
                     }
                     if let botAppStart = params.botAppStart, case let .peer(peer) = params.chatLocation {
-                        controller.presentBotApp(botApp: botAppStart.botApp, botPeer: peer, payload: botAppStart.payload)
+                        controller.presentBotApp(botApp: botAppStart.botApp, botPeer: peer, payload: botAppStart.payload, compact: botAppStart.compact)
                     }
                     params.setupController(controller)
                     found = true
@@ -188,7 +188,7 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
                 }
                 if let botAppStart = params.botAppStart, case let .peer(peer) = params.chatLocation {
                     Queue.mainQueue().after(0.1) {
-                        controller.presentBotApp(botApp: botAppStart.botApp, botPeer: peer, payload: botAppStart.payload)
+                        controller.presentBotApp(botApp: botAppStart.botApp, botPeer: peer, payload: botAppStart.payload, compact: botAppStart.compact)
                     }
                 }
             } else {
@@ -196,7 +196,7 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
                 
                 if let botAppStart = params.botAppStart, case let .peer(peer) = params.chatLocation {
                     Queue.mainQueue().after(0.1) {
-                        controller.presentBotApp(botApp: botAppStart.botApp, botPeer: peer, payload: botAppStart.payload)
+                        controller.presentBotApp(botApp: botAppStart.botApp, botPeer: peer, payload: botAppStart.payload, compact: botAppStart.compact)
                     }
                 }
             }
@@ -354,7 +354,7 @@ public func isOverlayControllerForChatNotificationOverlayPresentation(_ controll
     return false
 }
 
-public func navigateToForumThreadImpl(context: AccountContext, peerId: EnginePeer.Id, threadId: Int64, messageId: EngineMessage.Id?, navigationController: NavigationController, activateInput: ChatControllerActivateInput?, keepStack: NavigateToChatKeepStack) -> Signal<Never, NoError> {
+public func navigateToForumThreadImpl(context: AccountContext, peerId: EnginePeer.Id, threadId: Int64, messageId: EngineMessage.Id?, navigationController: NavigationController, activateInput: ChatControllerActivateInput?, scrollToEndIfExists: Bool, keepStack: NavigateToChatKeepStack) -> Signal<Never, NoError> {
     return fetchAndPreloadReplyThreadInfo(context: context, subject: .groupMessage(MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: Int32(clamping: threadId))), atMessageId: messageId, preload: false)
     |> deliverOnMainQueue
     |> beforeNext { [weak context, weak navigationController] result in
@@ -373,9 +373,11 @@ public func navigateToForumThreadImpl(context: AccountContext, peerId: EnginePee
                 context: context,
                 chatLocation: .replyThread(result.message),
                 chatLocationContextHolder: result.contextHolder,
-                subject: messageId.flatMap { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil) },
+                subject: messageId.flatMap { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false) },
                 activateInput: actualActivateInput,
-                keepStack: keepStack
+                keepStack: keepStack,
+                scrollToEndIfExists: scrollToEndIfExists,
+                animated: !scrollToEndIfExists
             )
         )
     }
