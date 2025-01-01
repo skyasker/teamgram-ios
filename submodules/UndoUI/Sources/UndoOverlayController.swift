@@ -24,7 +24,7 @@ public enum UndoOverlayContent {
     case messagesUnpinned(title: String, text: String, undo: Bool, isHidden: Bool)
     case setProximityAlert(title: String, text: String, cancelled: Bool)
     case invitedToVoiceChat(context: AccountContext, peer: EnginePeer, title: String?, text: String, action: String?, duration: Double)
-    case linkCopied(text: String)
+    case linkCopied(title: String?, text: String)
     case banned(text: String)
     case importedMessage(text: String)
     case audioRate(rate: CGFloat, text: String)
@@ -45,9 +45,12 @@ public enum UndoOverlayContent {
     case image(image: UIImage, title: String?, text: String, round: Bool, undoText: String?)
     case notificationSoundAdded(title: String, text: String, action: (() -> Void)?)
     case universal(animation: String, scale: CGFloat, colors: [String: UIColor], title: String?, text: String, customUndoText: String?, timeout: Double?)
+    case universalImage(image: UIImage, size: CGSize?, title: String?, text: String, customUndoText: String?, timeout: Double?)
     case premiumPaywall(title: String?, text: String, customUndoText: String?, timeout: Double?, linkAction: ((String) -> Void)?)
     case peers(context: AccountContext, peers: [EnginePeer], title: String?, text: String, customUndoText: String?)
     case messageTagged(context: AccountContext, isSingleMessage: Bool, customEmoji: TelegramMediaFile, isBuiltinReaction: Bool, customUndoText: String?)
+    case media(context: AccountContext, file: FileMediaReference, title: String?, text: String, undoText: String?, customAction: (() -> Void)?)
+    case progress(progress: CGFloat, title: String, text: String, undoText: String?)
 }
 
 public enum UndoOverlayAction {

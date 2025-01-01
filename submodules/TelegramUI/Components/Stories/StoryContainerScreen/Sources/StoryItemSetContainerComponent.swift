@@ -2864,7 +2864,7 @@ public final class StoryItemSetContainerComponent: Component {
                         style: .story,
                         placeholder: inputPlaceholder,
                         maxLength: 4096,
-                        queryTypes: [.mention, .emoji],
+                        queryTypes: [.mention, .hashtag, .emoji],
                         alwaysDarkWhenHasText: component.metrics.widthClass == .regular,
                         resetInputContents: resetInputContents,
                         nextInputMode: { [weak self] hasText in
@@ -2937,6 +2937,7 @@ public final class StoryItemSetContainerComponent: Component {
                             }
                             self.sendMessageContext.presentAttachmentMenu(view: self, subject: .default)
                         },
+                        attachmentButtonMode: component.slice.effectivePeer.isService ? nil : .attach,
                         myReaction: component.slice.item.storyItem.myReaction.flatMap { value -> MessageInputPanelComponent.MyReaction? in
                             var centerAnimation: TelegramMediaFile?
                             var animationFileId: Int64?
@@ -3007,6 +3008,7 @@ public final class StoryItemSetContainerComponent: Component {
                             }
                             self.performMoreAction(sourceView: sourceView, gesture: gesture)
                         },
+                        presentCaptionPositionTooltip: nil,
                         presentVoiceMessagesUnavailableTooltip: { [weak self] view in
                             guard let self, let component = self.component, self.voiceMessagesRestrictedTooltipController == nil else {
                                 return
@@ -4339,6 +4341,7 @@ public final class StoryItemSetContainerComponent: Component {
                                                 urlContext: .generic,
                                                 navigationController: nextController?.navigationController as? NavigationController,
                                                 forceExternal: false,
+                                                forceUpdate: false,
                                                 openPeer: { _, _ in
                                                 },
                                                 sendFile: nil,
@@ -5402,7 +5405,7 @@ public final class StoryItemSetContainerComponent: Component {
                 }
             }
             
-            guard let controller = MediaEditorScreen.makeEditStoryController(
+            guard let controller = MediaEditorScreenImpl.makeEditStoryController(
                 context: component.context,
                 peer: component.slice.effectivePeer,
                 storyItem: component.slice.item.storyItem,
@@ -6252,7 +6255,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 
                                 component.presentController(UndoOverlayController(
                                     presentationData: presentationData,
-                                    content: .linkCopied(text: component.strings.Story_ToastLinkCopied),
+                                    content: .linkCopied(title: nil, text: component.strings.Story_ToastLinkCopied),
                                     elevatedLayout: false,
                                     animateInAsReplacement: false,
                                     blurred: true,
@@ -6465,7 +6468,7 @@ public final class StoryItemSetContainerComponent: Component {
                                 
                                 component.presentController(UndoOverlayController(
                                     presentationData: presentationData,
-                                    content: .linkCopied(text: component.strings.Story_ToastLinkCopied),
+                                    content: .linkCopied(title: nil, text: component.strings.Story_ToastLinkCopied),
                                     elevatedLayout: false,
                                     animateInAsReplacement: false,
                                     blurred: true,
@@ -6764,7 +6767,7 @@ public final class StoryItemSetContainerComponent: Component {
                                     
                                     component.presentController(UndoOverlayController(
                                         presentationData: presentationData,
-                                        content: .linkCopied(text: component.strings.Story_ToastLinkCopied),
+                                        content: .linkCopied(title: nil, text: component.strings.Story_ToastLinkCopied),
                                         elevatedLayout: false,
                                         animateInAsReplacement: false,
                                         blurred: true,

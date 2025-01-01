@@ -10,9 +10,10 @@ import MediaPickerUI
 import MediaPasteboardUI
 import LegacyMediaPickerUI
 import MediaEditor
+import ChatEntityKeyboardInputNode
 
 extension ChatControllerImpl {
-    func displayPasteMenu(_ subjects: [MediaPickerScreen.Subject.Media]) {
+    func displayPasteMenu(_ subjects: [MediaPickerScreenImpl.Subject.Media]) {
         let _ = (self.context.sharedContext.accountManager.transaction { transaction -> GeneratedMediaStoreSettings in
             let entry = transaction.getSharedData(ApplicationSpecificSharedDataKeys.generatedMediaStoreSettings)?.get(GeneratedMediaStoreSettings.self)
             return entry ?? GeneratedMediaStoreSettings.defaultSettings
@@ -32,7 +33,13 @@ extension ChatControllerImpl {
                             })
                         }
                     },
-                    getSourceRect: nil
+                    getSourceRect: nil,
+                    makeEntityInputView: { [weak self] in
+                        guard let self else {
+                            return nil
+                        }
+                        return EntityInputView(context: self.context, isDark: false, areCustomEmojiEnabled: self.presentationInterfaceState.customEmojiAvailable)
+                    }
                 )
                 controller.navigationPresentation = .flatModal
                 strongSelf.push(controller)
@@ -176,6 +183,7 @@ extension ChatControllerImpl {
             additionalVideoTrimRange: nil,
             additionalVideoOffset: nil,
             additionalVideoVolume: nil,
+            collage: [],
             nightTheme: false,
             drawing: nil,
             maskDrawing: blackImage,
@@ -186,6 +194,7 @@ extension ChatControllerImpl {
             audioTrackOffset: nil,
             audioTrackVolume: nil,
             audioTrackSamples: nil,
+            collageTrackSamples: nil,
             coverImageTimestamp: nil,
             qualityPreset: nil
         )
@@ -199,7 +208,6 @@ extension ChatControllerImpl {
             configuration: configuration,
             outputPath: path
         )
-        videoExport.start()
         
         let _ = (videoExport.status
         |> deliverOnMainQueue).startStandalone(next: { [weak self] status in

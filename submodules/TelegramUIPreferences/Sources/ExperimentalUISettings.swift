@@ -60,6 +60,8 @@ public struct ExperimentalUISettings: Codable, Equatable {
     public var disableReloginTokens: Bool
     public var liveStreamV2: Bool
     public var dynamicStreaming: Bool
+    public var enableLocalTranslation: Bool
+    public var autoBenchmarkReflectors: Bool?
     
     public static var defaultSettings: ExperimentalUISettings {
         return ExperimentalUISettings(
@@ -97,7 +99,9 @@ public struct ExperimentalUISettings: Codable, Equatable {
             allowWebViewInspection: false,
             disableReloginTokens: false,
             liveStreamV2: false,
-            dynamicStreaming: false
+            dynamicStreaming: false,
+            enableLocalTranslation: false,
+            autoBenchmarkReflectors: nil
         )
     }
     
@@ -136,7 +140,9 @@ public struct ExperimentalUISettings: Codable, Equatable {
         allowWebViewInspection: Bool,
         disableReloginTokens: Bool,
         liveStreamV2: Bool,
-        dynamicStreaming: Bool
+        dynamicStreaming: Bool,
+        enableLocalTranslation: Bool,
+        autoBenchmarkReflectors: Bool?
     ) {
         self.keepChatNavigationStack = keepChatNavigationStack
         self.skipReadHistory = skipReadHistory
@@ -173,6 +179,8 @@ public struct ExperimentalUISettings: Codable, Equatable {
         self.disableReloginTokens = disableReloginTokens
         self.liveStreamV2 = liveStreamV2
         self.dynamicStreaming = dynamicStreaming
+        self.enableLocalTranslation = enableLocalTranslation
+        self.autoBenchmarkReflectors = autoBenchmarkReflectors
     }
     
     public init(from decoder: Decoder) throws {
@@ -212,7 +220,9 @@ public struct ExperimentalUISettings: Codable, Equatable {
         self.allowWebViewInspection = try container.decodeIfPresent(Bool.self, forKey: "allowWebViewInspection") ?? false
         self.disableReloginTokens = try container.decodeIfPresent(Bool.self, forKey: "disableReloginTokens") ?? false
         self.liveStreamV2 = try container.decodeIfPresent(Bool.self, forKey: "liveStreamV2") ?? false
-        self.dynamicStreaming = try container.decodeIfPresent(Bool.self, forKey: "dynamicStreaming") ?? false
+        self.dynamicStreaming = try container.decodeIfPresent(Bool.self, forKey: "dynamicStreaming_v2") ?? false
+        self.enableLocalTranslation = try container.decodeIfPresent(Bool.self, forKey: "enableLocalTranslation") ?? false
+        self.autoBenchmarkReflectors = try container.decodeIfPresent(Bool.self, forKey: "autoBenchmarkReflectors")
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -253,6 +263,8 @@ public struct ExperimentalUISettings: Codable, Equatable {
         try container.encode(self.disableReloginTokens, forKey: "disableReloginTokens")
         try container.encode(self.liveStreamV2, forKey: "liveStreamV2")
         try container.encode(self.dynamicStreaming, forKey: "dynamicStreaming")
+        try container.encode(self.enableLocalTranslation, forKey: "enableLocalTranslation")
+        try container.encodeIfPresent(self.autoBenchmarkReflectors, forKey: "autoBenchmarkReflectors")
     }
 }
 

@@ -1471,7 +1471,7 @@ final class VoiceChatControllerImpl: ViewController, VoiceChatController {
                             if let link = link {
                                 UIPasteboard.general.string = link
                                 
-                                strongSelf.presentUndoOverlay(content: .linkCopied(text: strongSelf.presentationData.strings.VoiceChat_InviteLinkCopiedText), action: { _ in return false })
+                                strongSelf.presentUndoOverlay(content: .linkCopied(title: nil, text: strongSelf.presentationData.strings.VoiceChat_InviteLinkCopiedText), action: { _ in return false })
                             }
                         })
                     }
@@ -3459,7 +3459,7 @@ final class VoiceChatControllerImpl: ViewController, VoiceChatController {
                     shareController.actionCompleted = { [weak self] in
                         if let strongSelf = self {
                             let presentationData = strongSelf.context.sharedContext.currentPresentationData.with { $0 }
-                            strongSelf.controller?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(text: presentationData.strings.VoiceChat_InviteLinkCopiedText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                            strongSelf.controller?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.VoiceChat_InviteLinkCopiedText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
                         }
                     }
                     strongSelf.controller?.present(shareController, in: .window(.root))
@@ -7098,10 +7098,7 @@ final class VoiceChatContextReferenceContentSource: ContextReferenceContentSourc
 }
 
 public func shouldUseV2VideoChatImpl(context: AccountContext) -> Bool {
-    var useV2 = false
-    if let data = context.currentAppConfiguration.with({ $0 }).data, let _ = data["ios_killswitch_enable_videochatui_v2"] {
-        useV2 = true
-    }
+    var useV2 = true
     if context.sharedContext.immediateExperimentalUISettings.disableCallV2 {
         useV2 = false
     }

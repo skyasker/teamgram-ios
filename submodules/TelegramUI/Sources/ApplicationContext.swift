@@ -516,7 +516,7 @@ final class AuthorizedApplicationContext {
                     |> deliverOnMainQueue).start(completed: {
                         controller?.dismiss()
                         if let strongSelf = self, let botName = botName {
-                            strongSelf.termsOfServiceProceedToBotDisposable.set((strongSelf.context.engine.peers.resolvePeerByName(name: botName, ageLimit: 10)
+                            strongSelf.termsOfServiceProceedToBotDisposable.set((strongSelf.context.engine.peers.resolvePeerByName(name: botName, referrer: nil, ageLimit: 10)
                             |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
                                 guard case let .result(result) = result else {
                                     return .complete()
@@ -945,8 +945,8 @@ final class AuthorizedApplicationContext {
                         chatLocation = .peer(peer)
                     }
                     
-                    if openAppIfAny, let parentController = self.rootController.viewControllers.last as? ViewController {
-                        self.context.sharedContext.openWebApp(context: self.context, parentController: parentController, updatedPresentationData: nil, peer: peer, threadId: nil, buttonText: "", url: "", simple: true, source: .generic, skipTermsOfService: true)
+                    if openAppIfAny, case let .user(user) = peer, let botInfo = user.botInfo, botInfo.flags.contains(.hasWebApp), let parentController = self.rootController.viewControllers.last as? ViewController {
+                        self.context.sharedContext.openWebApp(context: self.context, parentController: parentController, updatedPresentationData: nil, botPeer: peer, chatPeer: nil, threadId: nil, buttonText: "", url: "", simple: true, source: .generic, skipTermsOfService: true, payload: nil)
                     } else {
                         self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: self.rootController, context: self.context, chatLocation: chatLocation, subject: isOutgoingMessage ? messageId.flatMap { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false) } : nil, activateInput: activateInput ? .text : nil))
                     }

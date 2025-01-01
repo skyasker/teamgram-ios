@@ -262,6 +262,13 @@ final class StarsTransactionItemNode: ListViewItemNode, ItemListItemNode {
                     case .ads:
                         itemTitle = item.presentationData.strings.Stars_Intro_Transaction_TelegramAds_Title
                         itemSubtitle = item.presentationData.strings.Stars_Intro_Transaction_TelegramAds_Subtitle
+                    case .apiLimitExtension:
+                        itemTitle = item.presentationData.strings.Stars_Intro_Transaction_TelegramBotApi_Title
+                        if let floodskipNumber = item.transaction.floodskipNumber {
+                            itemSubtitle = item.presentationData.strings.Stars_Intro_Transaction_TelegramBotApi_Messages(floodskipNumber)
+                        } else {
+                            itemSubtitle = nil
+                        }
                     case .unsupported:
                         itemTitle = item.presentationData.strings.Stars_Intro_Transaction_Unsupported_Title
                         itemSubtitle = nil
@@ -270,8 +277,9 @@ final class StarsTransactionItemNode: ListViewItemNode, ItemListItemNode {
                     let itemLabel: NSAttributedString
                     let labelString: String
                     
-                    let formattedLabel = presentationStringsFormattedNumber(abs(Int32(item.transaction.count)), item.presentationData.dateTimeFormat.groupingSeparator)
-                    if item.transaction.count < 0 {
+                    let absCount = StarsAmount(value: abs(item.transaction.count.value), nanos: abs(item.transaction.count.nanos))
+                    let formattedLabel = presentationStringsFormattedNumber(absCount, item.presentationData.dateTimeFormat.groupingSeparator)
+                    if item.transaction.count < StarsAmount.zero {
                         labelString = "- \(formattedLabel)"
                     } else {
                         labelString = "+ \(formattedLabel)"

@@ -871,6 +871,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
                 
                 if !isVideo {
                     canEdit = true
+                    isImage = true
                 }
             } else if let media = media as? TelegramMediaWebpage, case let .Loaded(content) = media.content {
                 let type = webEmbedType(content: content)
@@ -957,7 +958,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
             } else if media is TelegramMediaImage {
                 hasCaption = true
             } else if let file = media as? TelegramMediaFile {
-                hasCaption = file.mimeType.hasPrefix("image/")
+                hasCaption = file.mimeType.hasPrefix("image/") || file.mimeType.hasPrefix("video/")
             } else if media is TelegramMediaInvoice {
                 hasCaption = true
             }

@@ -529,7 +529,7 @@ func initialStateWithPeerIds(_ transaction: Transaction, peerIds: Set<PeerId>, a
         }
     }
     
-    let state = AccountMutableState(initialState: AccountInitialState(state: (transaction.getState() as? AuthorizedAccountState)!.state!, peerIds: peerIds, peerIdsRequiringLocalChatState: peerIdsRequiringLocalChatState, channelStates: channelStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: locallyGeneratedMessageTimestamps, cloudReadStates: cloudReadStates, channelsToPollExplicitely: channelsToPollExplicitely), initialPeers: peers, initialReferencedReplyMessageIds: referencedReplyMessageIds, initialReferencedGeneralMessageIds: referencedGeneralMessageIds, initialStoredMessages: storedMessages, initialStoredStories: storedStories, initialReadInboxMaxIds: readInboxMaxIds, storedMessagesByPeerIdAndTimestamp: storedMessagesByPeerIdAndTimestamp)
+    let state = AccountMutableState(initialState: AccountInitialState(state: (transaction.getState() as? AuthorizedAccountState)!.state!, peerIds: peerIds, peerIdsRequiringLocalChatState: peerIdsRequiringLocalChatState, channelStates: channelStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: locallyGeneratedMessageTimestamps, cloudReadStates: cloudReadStates, channelsToPollExplicitely: channelsToPollExplicitely), initialPeers: peers, initialReferencedReplyMessageIds: referencedReplyMessageIds, initialReferencedGeneralMessageIds: referencedGeneralMessageIds, initialStoredMessages: storedMessages, initialStoredStories: storedStories, initialReadInboxMaxIds: readInboxMaxIds, storedMessagesByPeerIdAndTimestamp: storedMessagesByPeerIdAndTimestamp, initialSentScheduledMessageIds: Set())
     return state
 }
 
@@ -1666,12 +1666,19 @@ private func finalStateWithUpdatesAndServerTime(accountPeerId: PeerId, postbox: 
                 if let message = StoreMessage(apiMessage: apiMessage, accountPeerId: accountPeerId, peerIsForum: peerIsForum, namespace: Namespaces.Message.QuickReplyCloud) {
                     updatedState.addQuickReplyMessages([message])
                 }
-            case let .updateDeleteScheduledMessages(peer, messages):
+            case let .updateDeleteScheduledMessages(_, peer, messages, sentMessages):
                 var messageIds: [MessageId] = []
+                var sentMessageIds: [MessageId] = []
                 for message in messages {
                     messageIds.append(MessageId(peerId: peer.peerId, namespace: Namespaces.Message.ScheduledCloud, id: message))
                 }
+                if let sentMessages {
+                    for message in sentMessages {
+                        sentMessageIds.append(MessageId(peerId: peer.peerId, namespace: Namespaces.Message.Cloud, id: message))
+                    }
+                }
                 updatedState.deleteMessages(messageIds)
+                updatedState.addSentScheduledMessageIds(sentMessageIds)
             case let .updateDeleteQuickReplyMessages(_, messages):
                 var messageIds: [MessageId] = []
                 for message in messages {
@@ -1699,14 +1706,14 @@ private func finalStateWithUpdatesAndServerTime(accountPeerId: PeerId, postbox: 
                 updatedState.updateCachedPeerData(peer.peerId, { current in
                     if peer.peerId.namespace == Namespaces.Peer.CloudUser, let previous = current as? CachedUserData {
                         if let botInfo = previous.botInfo {
-                            return previous.withUpdatedBotInfo(BotInfo(description: botInfo.description, photo: botInfo.photo, video: botInfo.video, commands: commands, menuButton: botInfo.menuButton, privacyPolicyUrl: botInfo.privacyPolicyUrl))
+                            return previous.withUpdatedBotInfo(BotInfo(description: botInfo.description, photo: botInfo.photo, video: botInfo.video, commands: commands, menuButton: botInfo.menuButton, privacyPolicyUrl: botInfo.privacyPolicyUrl, appSettings: botInfo.appSettings))
                         }
                     } else if peer.peerId.namespace == Namespaces.Peer.CloudGroup, let previous = current as? CachedGroupData {
                         if let index = previous.botInfos.firstIndex(where: { $0.peerId == botPeerId }) {
                             var updatedBotInfos = previous.botInfos
                             let previousBotInfo = updatedBotInfos[index]
                             updatedBotInfos.remove(at: index)
-                            updatedBotInfos.insert(CachedPeerBotInfo(peerId: botPeerId, botInfo: BotInfo(description: previousBotInfo.botInfo.description, photo: previousBotInfo.botInfo.photo, video: previousBotInfo.botInfo.video, commands: commands, menuButton: previousBotInfo.botInfo.menuButton, privacyPolicyUrl: previousBotInfo.botInfo.privacyPolicyUrl)), at: index)
+                            updatedBotInfos.insert(CachedPeerBotInfo(peerId: botPeerId, botInfo: BotInfo(description: previousBotInfo.botInfo.description, photo: previousBotInfo.botInfo.photo, video: previousBotInfo.botInfo.video, commands: commands, menuButton: previousBotInfo.botInfo.menuButton, privacyPolicyUrl: previousBotInfo.botInfo.privacyPolicyUrl, appSettings: previousBotInfo.botInfo.appSettings)), at: index)
                             return previous.withUpdatedBotInfos(updatedBotInfos)
                         }
                     } else if peer.peerId.namespace == Namespaces.Peer.CloudChannel, let previous = current as? CachedChannelData {
@@ -1714,7 +1721,7 @@ private func finalStateWithUpdatesAndServerTime(accountPeerId: PeerId, postbox: 
                             var updatedBotInfos = previous.botInfos
                             let previousBotInfo = updatedBotInfos[index]
                             updatedBotInfos.remove(at: index)
-                            updatedBotInfos.insert(CachedPeerBotInfo(peerId: botPeerId, botInfo: BotInfo(description: previousBotInfo.botInfo.description, photo: previousBotInfo.botInfo.photo, video: previousBotInfo.botInfo.video, commands: commands, menuButton: previousBotInfo.botInfo.menuButton, privacyPolicyUrl: previousBotInfo.botInfo.privacyPolicyUrl)), at: index)
+                            updatedBotInfos.insert(CachedPeerBotInfo(peerId: botPeerId, botInfo: BotInfo(description: previousBotInfo.botInfo.description, photo: previousBotInfo.botInfo.photo, video: previousBotInfo.botInfo.video, commands: commands, menuButton: previousBotInfo.botInfo.menuButton, privacyPolicyUrl: previousBotInfo.botInfo.privacyPolicyUrl, appSettings: previousBotInfo.botInfo.appSettings)), at: index)
                             return previous.withUpdatedBotInfos(updatedBotInfos)
                         }
                     }
@@ -1726,7 +1733,7 @@ private func finalStateWithUpdatesAndServerTime(accountPeerId: PeerId, postbox: 
                 updatedState.updateCachedPeerData(botPeerId, { current in
                     if let previous = current as? CachedUserData {
                         if let botInfo = previous.botInfo {
-                            return previous.withUpdatedBotInfo(BotInfo(description: botInfo.description, photo: botInfo.photo, video: botInfo.video, commands: botInfo.commands, menuButton: menuButton, privacyPolicyUrl: botInfo.privacyPolicyUrl))
+                            return previous.withUpdatedBotInfo(BotInfo(description: botInfo.description, photo: botInfo.photo, video: botInfo.video, commands: botInfo.commands, menuButton: menuButton, privacyPolicyUrl: botInfo.privacyPolicyUrl, appSettings: botInfo.appSettings))
                         }
                     }
                     return current
@@ -2628,7 +2635,7 @@ func pollChannelOnce(accountPeerId: PeerId, postbox: Postbox, network: Network, 
                 peerChatInfos[peerId] = PeerChatInfo(notificationSettings: notificationSettings)
             }
         }
-        let initialState = AccountMutableState(initialState: AccountInitialState(state: accountState, peerIds: Set(), peerIdsRequiringLocalChatState: Set(), channelStates: channelStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: [:], cloudReadStates: [:], channelsToPollExplicitely: Set()), initialPeers: initialPeers, initialReferencedReplyMessageIds: ReferencedReplyMessageIds(), initialReferencedGeneralMessageIds: Set(), initialStoredMessages: Set(), initialStoredStories: [:], initialReadInboxMaxIds: [:], storedMessagesByPeerIdAndTimestamp: [:])
+        let initialState = AccountMutableState(initialState: AccountInitialState(state: accountState, peerIds: Set(), peerIdsRequiringLocalChatState: Set(), channelStates: channelStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: [:], cloudReadStates: [:], channelsToPollExplicitely: Set()), initialPeers: initialPeers, initialReferencedReplyMessageIds: ReferencedReplyMessageIds(), initialReferencedGeneralMessageIds: Set(), initialStoredMessages: Set(), initialStoredStories: [:], initialReadInboxMaxIds: [:], storedMessagesByPeerIdAndTimestamp: [:], initialSentScheduledMessageIds: Set())
         return pollChannel(accountPeerId: accountPeerId, postbox: postbox, network: network, peer: peer, state: initialState)
         |> mapToSignal { (finalState, _, timeout) -> Signal<Int32, NoError> in
             return resolveAssociatedMessages(accountPeerId: accountPeerId, postbox: postbox, network: network, state: finalState)
@@ -2685,7 +2692,7 @@ public func standalonePollChannelOnce(accountPeerId: PeerId, postbox: Postbox, n
                 peerChatInfos[peerId] = PeerChatInfo(notificationSettings: notificationSettings)
             }
         }
-        let initialState = AccountMutableState(initialState: AccountInitialState(state: accountState, peerIds: Set(), peerIdsRequiringLocalChatState: Set(), channelStates: channelStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: [:], cloudReadStates: [:], channelsToPollExplicitely: Set()), initialPeers: initialPeers, initialReferencedReplyMessageIds: ReferencedReplyMessageIds(), initialReferencedGeneralMessageIds: Set(), initialStoredMessages: Set(), initialStoredStories: [:], initialReadInboxMaxIds: [:], storedMessagesByPeerIdAndTimestamp: [:])
+        let initialState = AccountMutableState(initialState: AccountInitialState(state: accountState, peerIds: Set(), peerIdsRequiringLocalChatState: Set(), channelStates: channelStates, peerChatInfos: peerChatInfos, locallyGeneratedMessageTimestamps: [:], cloudReadStates: [:], channelsToPollExplicitely: Set()), initialPeers: initialPeers, initialReferencedReplyMessageIds: ReferencedReplyMessageIds(), initialReferencedGeneralMessageIds: Set(), initialStoredMessages: Set(), initialStoredStories: [:], initialReadInboxMaxIds: [:], storedMessagesByPeerIdAndTimestamp: [:], initialSentScheduledMessageIds: Set())
         return pollChannel(accountPeerId: accountPeerId, postbox: postbox, network: network, peer: peer, state: initialState)
         |> mapToSignal { (finalState, _, timeout) -> Signal<Never, NoError> in
             return resolveAssociatedMessages(accountPeerId: accountPeerId, postbox: postbox, network: network, state: finalState)
@@ -3286,6 +3293,8 @@ private func optimizedOperations(_ operations: [AccountStateMutationOperation]) 
                     result.append(.AddQuickReplyMessages(currentAddQuickReplyMessages.messages))
                 }
                 currentAddMessages = nil
+                currentAddScheduledMessages = nil
+                currentAddQuickReplyMessages = nil
                 result.append(operation)
             case let .UpdateState(state):
                 updatedState = state
@@ -3409,7 +3418,7 @@ func replayFinalState(
     var syncAttachMenuBots = false
     var updateConfig = false
     var updatedRevenueBalances: [PeerId: RevenueStats.Balances] = [:]
-    var updatedStarsBalance: [PeerId: Int64] = [:]
+    var updatedStarsBalance: [PeerId: StarsAmount] = [:]
     var updatedStarsRevenueStatus: [PeerId: StarsRevenueStats.Balances] = [:]
     var updatedStarsReactionsAreAnonymousByDefault: Bool?
     
@@ -4837,7 +4846,7 @@ func replayFinalState(
             case let .UpdateRevenueBalances(peerId, balances):
                 updatedRevenueBalances[peerId] = balances
             case let .UpdateStarsBalance(peerId, balance):
-                updatedStarsBalance[peerId] = balance
+                updatedStarsBalance[peerId] = StarsAmount(apiAmount: balance)
             case let .UpdateStarsRevenueStatus(peerId, status):
                 updatedStarsRevenueStatus[peerId] = status
             case let .UpdateStarsReactionsAreAnonymousByDefault(value):
@@ -5340,5 +5349,29 @@ func replayFinalState(
         _internal_setStarsReactionDefaultToPrivate(isPrivate: updatedStarsReactionsAreAnonymousByDefault, transaction: transaction)
     }
     
-    return AccountReplayedFinalState(state: finalState, addedIncomingMessageIds: addedIncomingMessageIds, addedReactionEvents: addedReactionEvents, wasScheduledMessageIds: wasScheduledMessageIds, addedSecretMessageIds: addedSecretMessageIds, deletedMessageIds: deletedMessageIds, updatedTypingActivities: updatedTypingActivities, updatedWebpages: updatedWebpages, updatedCalls: updatedCalls, addedCallSignalingData: addedCallSignalingData, updatedGroupCallParticipants: updatedGroupCallParticipants, storyUpdates: storyUpdates, updatedPeersNearby: updatedPeersNearby, isContactUpdates: isContactUpdates, delayNotificatonsUntil: delayNotificatonsUntil, updatedIncomingThreadReadStates: updatedIncomingThreadReadStates, updatedOutgoingThreadReadStates: updatedOutgoingThreadReadStates, updateConfig: updateConfig, isPremiumUpdated: isPremiumUpdated, updatedRevenueBalances: updatedRevenueBalances, updatedStarsBalance: updatedStarsBalance, updatedStarsRevenueStatus: updatedStarsRevenueStatus)
+    return AccountReplayedFinalState(
+        state: finalState,
+        addedIncomingMessageIds: addedIncomingMessageIds,
+        addedReactionEvents: addedReactionEvents,
+        wasScheduledMessageIds: wasScheduledMessageIds,
+        addedSecretMessageIds: addedSecretMessageIds,
+        deletedMessageIds: deletedMessageIds,
+        updatedTypingActivities: updatedTypingActivities,
+        updatedWebpages: updatedWebpages,
+        updatedCalls: updatedCalls,
+        addedCallSignalingData: addedCallSignalingData,
+        updatedGroupCallParticipants: updatedGroupCallParticipants,
+        storyUpdates: storyUpdates,
+        updatedPeersNearby: updatedPeersNearby,
+        isContactUpdates: isContactUpdates,
+        delayNotificatonsUntil: delayNotificatonsUntil,
+        updatedIncomingThreadReadStates: updatedIncomingThreadReadStates,
+        updatedOutgoingThreadReadStates: updatedOutgoingThreadReadStates,
+        updateConfig: updateConfig,
+        isPremiumUpdated: isPremiumUpdated,
+        updatedRevenueBalances: updatedRevenueBalances,
+        updatedStarsBalance: updatedStarsBalance,
+        updatedStarsRevenueStatus: updatedStarsRevenueStatus,
+        sentScheduledMessageIds: finalState.state.sentScheduledMessageIds
+    )
 }

@@ -148,6 +148,8 @@ public final class BrowserBookmarksScreen: ViewController {
             }, openJoinLink: { _ in
             }, openWebView: { _, _, _, _ in
             }, activateAdAction: { _, _, _, _ in
+            }, adContextAction: { _, _, _ in
+            }, removeAd: { _ in
             }, openRequestedPeerSelection: { _, _, _, _ in
             }, saveMediaToFiles: { _ in
             }, openNoAdsDemo: {
@@ -243,7 +245,7 @@ public final class BrowserBookmarksScreen: ViewController {
                         
                         UIPasteboard.general.string = url
                         if let self  {
-                            self.controller?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+                            self.controller?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
                         }
                     })))
                 }
