@@ -87,7 +87,7 @@ public func calculateAvatarColors(context: AccountContext?, explicitColorIndex: 
     }
     
     let colors: [UIColor]
-    if icon != .none && icon != .cameraIcon {
+    if icon != .none {
         if case .deletedIcon = icon {
             colors = AvatarNode.grayscaleColors
         } else if case .phoneIcon = icon {
@@ -120,6 +120,8 @@ public func calculateAvatarColors(context: AccountContext?, explicitColorIndex: 
                 backgroundColors = theme.chatList.pinnedArchiveAvatarColor.backgroundColors.colors
             }
             colors = [backgroundColors.1, backgroundColors.0]
+        } else if case .cameraIcon = icon {
+            colors = AvatarNode.repostColors
         } else {
             colors = AvatarNode.grayscaleColors
         }
@@ -288,7 +290,7 @@ public final class AvatarNode: ASDisplayNode {
     ]
     
     static let repostColors: [UIColor] = [
-        UIColor(rgb: 0x34C76F), UIColor(rgb: 0x3DA1FD)
+        UIColor(rgb: 0x3DA1FD), UIColor(rgb: 0x34C76F)
     ]
     
     public final class ContentNode: ASDisplayNode {
@@ -486,6 +488,30 @@ public final class AvatarNode: ASDisplayNode {
                 animationNode.frame = CGRect(x: floor((self.bounds.width - size.width) / 2.0), y: floor((self.bounds.height - size.height) / 2.0) + 1.0, width: size.width, height: size.height)
                 Queue.mainQueue().after(0.15, {
                     animationNode.play()
+                })
+            }
+        }
+        
+        public func playCameraAnimation() {
+            let animationBackgroundNode = ASImageNode()
+            animationBackgroundNode.isUserInteractionEnabled = false
+            animationBackgroundNode.frame = self.imageNode.frame
+            animationBackgroundNode.image = generateGradientFilledCircleImage(diameter: self.imageNode.frame.width, colors: AvatarNode.repostColors.map { $0.cgColor } as NSArray)
+            self.addSubnode(animationBackgroundNode)
+            
+            let animationNode = AnimationNode(animation: "anim_camera", colors: [:], scale: 0.082)
+            animationNode.isUserInteractionEnabled = false
+            self.addSubnode(animationNode)
+            
+            if var size = animationNode.preferredSize() {
+                size = CGSize(width: ceil(size.width), height: ceil(size.height))
+                animationNode.frame = CGRect(x: floor((self.bounds.width - size.width) / 2.0) + 1.0, y: floor((self.bounds.height - size.height) / 2.0), width: size.width, height: size.height)
+                Queue.mainQueue().after(0.15, {
+                    animationNode.play()
+                    animationNode.completion = { [weak animationNode, weak animationBackgroundNode] in
+                        animationNode?.removeFromSupernode()
+                        animationBackgroundNode?.removeFromSupernode()
+                    }
                 })
             }
         }
@@ -1147,6 +1173,10 @@ public final class AvatarNode: ASDisplayNode {
     
     public func playRepostAnimation() {
         self.contentNode.playRepostAnimation()
+    }
+    
+    public func playCameraAnimation() {
+        self.contentNode.playCameraAnimation ()
     }
     
     public func setPeer(

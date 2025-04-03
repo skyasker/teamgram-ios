@@ -160,6 +160,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
             case wallpaper
             case story
             case addImage
+            case cover
             case createSticker
             case createAvatar
         }
@@ -210,7 +211,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
     public var openAvatarEditor: () -> Void = {}
     
     private var completed = false
-    public var legacyCompletion: (_ signals: [Any], _ silently: Bool, _ scheduleTime: Int32?, ChatSendMessageActionSheetController.SendParameters?, @escaping (String) -> UIView?, @escaping () -> Void) -> Void = { _, _, _, _, _, _ in }
+    public var legacyCompletion: (_ fromGallery: Bool, _ signals: [Any], _ silently: Bool, _ scheduleTime: Int32?, ChatSendMessageActionSheetController.SendParameters?, @escaping (String) -> UIView?, @escaping () -> Void) -> Void = { _, _, _, _, _, _, _ in }
     
     public var requestAttachmentMenuExpansion: () -> Void = { }
     public var updateNavigationStack: (@escaping ([AttachmentContainable]) -> ([AttachmentContainable], AttachmentMediaPickerContext?)) -> Void = { _ in }
@@ -234,6 +235,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
     }
     
     var dismissAll: () -> Void = { }
+    public var editCover: (CGSize, @escaping (UIImage) -> Void) -> Void = { _, _ in }
     
     private class Node: ViewControllerTracingNode, ASGestureRecognizerDelegate {
         enum DisplayMode {
@@ -311,7 +313,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
             self.presentationData = controller.presentationData
             
             var assetType: PHAssetMediaType?
-            if case let .assets(_, mode) = controller.subject, [.wallpaper, .addImage, .createSticker].contains(mode) {
+            if case let .assets(_, mode) = controller.subject, [.wallpaper, .addImage, .cover, .createSticker].contains(mode) {
                 assetType = .image
             }
             let mediaAssetsContext = MediaAssetsContext(assetType: assetType)
@@ -522,7 +524,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
             self.gridNode.scrollView.alwaysBounceVertical = true
             self.gridNode.scrollView.showsVerticalScrollIndicator = false
             
-            if case let .assets(_, mode) = controller.subject, [.wallpaper, .story, .addImage, .createSticker, .createAvatar].contains(mode) {
+            if case let .assets(_, mode) = controller.subject, [.wallpaper, .story, .addImage, .cover, .createSticker, .createAvatar].contains(mode) {
                 
             } else {
                 let selectionGesture = MediaPickerGridSelectionGesture<TGMediaSelectableItem>()
@@ -651,6 +653,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 self.gridNode.scrollView.addSubview(cameraView)
                 self.gridNode.addSubnode(self.cameraActivateAreaNode)
             } else if useModernCamera, !Camera.isIpad {
+                #if !targetEnvironment(simulator)
                 var cameraPosition: Camera.Position = .back
                 if case .assets(nil, .createAvatar) = controller.subject {
                     cameraPosition = .front
@@ -703,6 +706,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 } else {
                     setupCamera()
                 }
+                #endif
             } else {
                 self.containerNode.clipsToBounds = true
             }
@@ -1215,7 +1219,9 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 }
             }, presentSchedulePicker: controller.presentSchedulePicker, presentTimerPicker: controller.presentTimerPicker, getCaptionPanelView: controller.getCaptionPanelView, present: { [weak self] c, a in
                 self?.currentGalleryParentController = c
-                self?.controller?.present(c, in: .window(.root), with: a)
+                c.navigationPresentation = .flatModal
+                self?.controller?.parentController()?.push(c)
+                //self?.controller?.present(c, in: .window(.root), with: a)
             }, finishedTransitionIn: { [weak self] in
                 self?.openingMedia = false
                 self?.hasGallery = true
@@ -1225,6 +1231,8 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 self?.updateIsCameraActive()
             }, dismissAll: { [weak self] in
                 self?.controller?.dismissAll()
+            }, editCover: { [weak self] dimensions, completion in
+                self?.controller?.editCover(dimensions, completion)
             })
         }
         
@@ -1264,6 +1272,8 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 self?.updateIsCameraActive()
             }, dismissAll: { [weak self] in
                 self?.controller?.dismissAll()
+            }, editCover: { _, _ in
+                
             })
         }
         
@@ -1284,7 +1294,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
             }
         }
         
-        fileprivate func send(asFile: Bool = false, silently: Bool, scheduleTime: Int32?, animated: Bool, parameters: ChatSendMessageActionSheetController.SendParameters?, completion: @escaping () -> Void) {
+        fileprivate func send(fromGallery: Bool = false, asFile: Bool = false, silently: Bool, scheduleTime: Int32?, animated: Bool, parameters: ChatSendMessageActionSheetController.SendParameters?, completion: @escaping () -> Void) {
             guard let controller = self.controller, !controller.completed else {
                 return
             }
@@ -1312,7 +1322,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 }
             }
             
-            let proceed: (Bool) -> Void = { convertToJpeg in
+            let proceed: (Bool) -> Void = { [weak self] convertToJpeg in
                 let signals: [Any]!
                 switch controller.subject {
                 case .assets:
@@ -1324,12 +1334,17 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                     return
                 }
                 controller.completed = true
-                controller.legacyCompletion(signals, silently, scheduleTime, parameters, { [weak self] identifier in
+                controller.legacyCompletion(fromGallery, signals, silently, scheduleTime, parameters, { [weak self] identifier in
                     return !asFile ? self?.getItemSnapshot(identifier) : nil
                 }, { [weak self] in
                     completion()
                     self?.controller?.dismiss(animated: animated)
                 })
+                
+                Queue.mainQueue().after(1.5) {
+                    controller.isDismissing = false
+                    controller.completed = false
+                }
             }
             
             if asFile && hasHeic {
@@ -1536,11 +1551,8 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
             let itemSpacing: CGFloat = 1.0
             let itemWidth = floorToScreenPixels((width - itemSpacing * CGFloat(itemsPerRow - 1)) / CGFloat(itemsPerRow))
             
-            var cutoutRect: CGRect?
+            var cutoutRects: [CGRect] = []
             var cameraRect: CGRect? = CGRect(origin: CGPoint(x: layout.safeInsets.left, y: 0.0), size: CGSize(width: itemWidth, height: itemWidth * 2.0 + 1.0))
-            if case .assets(nil, .createAvatar) = controller.subject {
-                cameraRect = CGRect(origin: CGPoint(x: layout.safeInsets.left, y: 0.0), size: CGSize(width: itemWidth, height: itemWidth))
-            }
             if self.cameraView == nil && self.modernCameraView == nil {
                 cameraRect = nil
             }
@@ -1640,9 +1652,11 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
             
             transition.updateFrame(node: self.containerNode, frame: CGRect(origin: CGPoint(), size: CGSize(width: bounds.width, height: bounds.height)))
             
-            cutoutRect = cameraRect
+            if let cameraRect {
+                cutoutRects.append(cameraRect)
+            }
             if let _ = self.avatarEditorPreviewView {
-                cutoutRect = CGRect(origin: CGPoint(x: layout.safeInsets.left, y: 0.0), size: CGSize(width: cameraRect != nil ? itemWidth * 2.0 : itemWidth, height: itemWidth))
+                cutoutRects.append(CGRect(x: cameraRect != nil ? cameraRect!.maxX + itemSpacing : layout.safeInsets.left, y: 0.0, width: itemWidth, height: itemWidth))
             }
             
             var itemHeight = itemWidth
@@ -1650,7 +1664,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 itemHeight = floor(itemWidth * 1.227)
             }
             let preloadSize: CGFloat = itemHeight// * 3.0
-            self.gridNode.transaction(GridNodeTransaction(deleteItems: [], insertItems: [], updateItems: [], scrollToItem: nil, updateLayout: GridNodeUpdateLayout(layout: GridNodeLayout(size: bounds.size, insets: gridInsets, scrollIndicatorInsets: nil, preloadSize: preloadSize, type: .fixed(itemSize: CGSize(width: itemWidth, height: itemHeight), fillWidth: true, lineSpacing: itemSpacing, itemSpacing: itemSpacing), cutout: cutoutRect), transition: transition), itemTransition: .immediate, stationaryItems: .none, updateFirstIndexInSectionOffset: nil, updateOpaqueState: nil, synchronousLoads: false), completion: { [weak self] _ in
+            self.gridNode.transaction(GridNodeTransaction(deleteItems: [], insertItems: [], updateItems: [], scrollToItem: nil, updateLayout: GridNodeUpdateLayout(layout: GridNodeLayout(size: bounds.size, insets: gridInsets, scrollIndicatorInsets: nil, preloadSize: preloadSize, type: .fixed(itemSize: CGSize(width: itemWidth, height: itemHeight), fillWidth: true, lineSpacing: itemSpacing, itemSpacing: itemSpacing), cutouts: cutoutRects), transition: transition), itemTransition: .immediate, stationaryItems: .none, updateFirstIndexInSectionOffset: nil, updateOpaqueState: nil, synchronousLoads: false), completion: { [weak self] _ in
                 guard let strongSelf = self else {
                     return
                 }
@@ -1665,14 +1679,14 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                         })
                     }
                 }
+                Queue.mainQueue().after(0.01) {
+                    strongSelf.cameraWrapperView.superview?.addSubview(strongSelf.cameraWrapperView)
+                }
             })
             
             if let avatarEditorPreviewView = self.avatarEditorPreviewView {
                 avatarEditorPreviewView.frame = CGRect(origin: CGPoint(x: cameraRect != nil ? cameraRect!.maxX + itemSpacing : layout.safeInsets.left, y: 0.0), size: CGSize(width: itemWidth, height: itemWidth))
                 avatarEditorPreviewView.updateLayout(size: CGSize(width: itemWidth, height: itemWidth))
-                if self.gridNode.view.subviews.last !== avatarEditorPreviewView {
-                    self.gridNode.view.bringSubviewToFront(avatarEditorPreviewView)
-                }
             }
             
             if let selectionNode = self.selectionNode, let controller = self.controller {
@@ -1825,6 +1839,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
         paidMediaAllowed: Bool = false,
         subject: Subject,
         forCollage: Bool = false,
+        sendPaidMessageStars: Int64? = nil,
         editingContext: TGMediaEditingContext? = nil,
         selectionContext: TGMediaSelectionContext? = nil,
         saveEditedPhotos: Bool = false,
@@ -1867,9 +1882,8 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                     self.titleView.subtitle = presentationData.strings.MediaPicker_CreateSticker
                     self.titleView.isEnabled = true
                 case .createAvatar:
-                    //TODO:localize
                     self.titleView.title = presentationData.strings.MediaPicker_Recents
-                    self.titleView.subtitle = "Set new profile photo"
+                    self.titleView.subtitle = presentationData.strings.MediaPicker_SetNewPhoto
                     self.titleView.isEnabled = true
                 case .story:
                     self.titleView.title = presentationData.strings.MediaPicker_Recents
@@ -1878,6 +1892,8 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                     self.titleView.title = presentationData.strings.Conversation_Theme_ChooseWallpaperTitle
                 case .addImage:
                     self.titleView.title = presentationData.strings.MediaPicker_AddImage
+                case .cover:
+                    self.titleView.title = presentationData.strings.MediaPicker_ChooseCover
                 }
             }
         } else {
@@ -2104,7 +2120,7 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 if let currentItem = currentItem {
                     selectionState.setItem(currentItem, selected: true)
                 }
-                strongSelf.controllerNode.send(silently: silently, scheduleTime: scheduleTime, animated: animated, parameters: parameters, completion: completion)
+                strongSelf.controllerNode.send(fromGallery: currentItem != nil, silently: silently, scheduleTime: scheduleTime, animated: animated, parameters: parameters, completion: completion)
             }
         }, schedule: { [weak self] parameters in
             if let strongSelf = self {
@@ -2118,6 +2134,8 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
             }
         }, selectionState: selectionContext, editingState: editingContext ?? TGMediaEditingContext())
         self.interaction?.selectionState?.grouping = true
+        
+        self.interaction?.editingState.sendPaidMessageStars = sendPaidMessageStars ?? 0
         
         if case let .media(media) = self.subject {
             for item in media {
@@ -2363,7 +2381,6 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
         transition.updateTransformScale(node: self.moreButtonNode.iconNode, scale: moreIsVisible ? 1.0 : 0.1)
         
         //if self. {
-            //TODO:localize
             //self.mainButtonStatePromise.set(.single(AttachmentMainButtonState(text: "Add", badge: "\(count)", font: .bold, background: .color(self.presentationData.theme.actionSheet.controlAccentColor), textColor: self.presentationData.theme.list.itemCheckColors.foregroundColor, isVisible: count > 0, progress: .none, isEnabled: true, hasShimmer: false)))
         //}
     }
@@ -3377,8 +3394,7 @@ public func avatarMediaPickerController(
         var mainButtonState: AttachmentMainButtonState?
         
         if canDelete {
-            //TODO:localize
-            mainButtonState = AttachmentMainButtonState(text: "Remove Photo", font: .regular, background: .color(.clear), textColor: presentationData.theme.actionSheet.destructiveActionTextColor, isVisible: true, progress: .none, isEnabled: true, hasShimmer: false)
+            mainButtonState = AttachmentMainButtonState(text: presentationData.strings.MediaPicker_RemovePhoto, font: .regular, background: .color(.clear), textColor: presentationData.theme.actionSheet.destructiveActionTextColor, isVisible: true, progress: .none, isEnabled: true, hasShimmer: false)
         }
         
         let mediaPickerController = MediaPickerScreenImpl(
@@ -3464,6 +3480,68 @@ public func avatarMediaPickerController(
                     cameraScreen.returnFromEditor()
                 }
             }
+        }
+        present(mediaPickerController, mediaPickerController.mediaPickerContext)
+    }
+    controller.willDismiss = {
+        dismissed()
+    }
+    controller.navigationPresentation = .flatModal
+    controller.supportedOrientations = ViewControllerSupportedOrientations(regularSize: .all, compactSize: .portrait)
+    return controller
+}
+
+
+
+public func coverMediaPickerController(
+    context: AccountContext,
+    completion: @escaping (Any?, UIView?, CGRect, UIImage?, Bool, @escaping (Bool?) -> (UIView, CGRect)?, @escaping () -> Void) -> Void,
+    dismissed: @escaping () -> Void
+) -> ViewController {
+    let presentationData = context.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: defaultDarkColorPresentationTheme)
+    let updatedPresentationData: (PresentationData, Signal<PresentationData, NoError>) = (presentationData, .single(presentationData))
+    
+    let controller = AttachmentController(context: context, updatedPresentationData: updatedPresentationData, chatLocation: nil, buttons: [.standalone], initialButton: .standalone, fromMenu: false, hasTextInput: false, makeEntityInputView: {
+        return nil
+    })
+    controller.requestController = { [weak controller] _, present in
+        let mediaPickerController = MediaPickerScreenImpl(
+            context: context,
+            updatedPresentationData: updatedPresentationData,
+            peer: nil,
+            threadTitle: nil,
+            chatLocation: nil,
+            bannedSendPhotos: nil,
+            bannedSendVideos: nil,
+            subject: .assets(nil, .cover)
+        )
+        mediaPickerController.customSelection = { controller, result in
+            if let result = result as? PHAsset {
+                controller.updateHiddenMediaId(result.localIdentifier)
+                if let transitionView = controller.transitionView(for: result.localIdentifier, snapshot: false) {
+                    let transitionOut: (Bool?) -> (UIView, CGRect)? = { isNew in
+                        if let isNew {
+                            if isNew {
+                                controller.updateHiddenMediaId(nil)
+                                if let transitionView = controller.defaultTransitionView() {
+                                    return (transitionView, transitionView.bounds)
+                                }
+                            } else if let transitionView = controller.transitionView(for: result.localIdentifier, snapshot: false) {
+                                return (transitionView, transitionView.bounds)
+                            }
+                        }
+                        return nil
+                    }
+                    completion(result, transitionView, transitionView.bounds, controller.transitionImage(for: result.localIdentifier), false, transitionOut, { [weak controller] in
+                        controller?.updateHiddenMediaId(nil)
+                    })
+                }
+            }
+        }
+        mediaPickerController.openAvatarEditor = { [weak controller] in
+            completion(nil, nil, .zero, nil, false, { _ in return nil }, {
+            })
+            controller?.dismiss(animated: true)
         }
         present(mediaPickerController, mediaPickerController.mediaPickerContext)
     }
