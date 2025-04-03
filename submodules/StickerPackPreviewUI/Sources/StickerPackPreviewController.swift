@@ -118,7 +118,7 @@ public final class StickerPackPreviewController: ViewController, StandalonePrese
                     let parentNavigationController = strongSelf.parentNavigationController
                     let shareController = strongSelf.context.sharedContext.makeShareController(
                         context: strongSelf.context,
-                        subject: .url("https://t.me/addstickers/\(info.shortName)"),
+                        subject: .url("https://teamgram.me/addstickers/\(info.shortName)"),
                         forceExternal: true,
                         shareStory: nil,
                         enqueued: nil,

@@ -1696,7 +1696,7 @@ private func infoItems(data: PeerInfoScreenData?, context: AccountContext, prese
                 threadId = message.threadId
             }
             
-            let linkText = "https://t.me/\(mainUsername)/\(threadId)"
+            let linkText = "https://teamgram.me/\(mainUsername)/\(threadId)"
             
             items[currentPeerInfoSection]!.append(
                 PeerInfoScreenLabeledValueItem(
@@ -1754,7 +1754,7 @@ private func infoItems(data: PeerInfoScreenData?, context: AccountContext, prese
                     PeerInfoScreenLabeledValueItem(
                         id: ItemUsername,
                         label: presentationData.strings.Channel_LinkItem,
-                        text: "https://t.me/\(mainUsername)",
+                        text: "https://teamgram.me/\(mainUsername)",
                         additionalText: additionalUsernames,
                         textColor: .accent,
                         icon: .qrCode,
@@ -4882,7 +4882,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 }
             }
             if !found {
-                self.openUrl(url: "https://t.me/nft/\(slug)", concealed: false, external: false)
+                self.openUrl(url: "https://teamgram.me/nft/\(slug)", concealed: false, external: false)
             }
         }
         
@@ -7296,7 +7296,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         if value.hasPrefix("https://") {
             url = value
         } else {
-            url = "https://t.me/\(value)"
+            url = "https://teamgram.me/\(value)"
         }
         
         let openShare: (TelegramCollectibleItemInfo?) -> Void = { [weak self] collectibleItemInfo in
@@ -8682,7 +8682,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 return
             }
             if case let .user(peer) = peer, let username = peer.addressName {
-                let shareController = ShareController(context: strongSelf.context, subject: .url("https://t.me/\(username)"), updatedPresentationData: strongSelf.controller?.updatedPresentationData)
+                let shareController = ShareController(context: strongSelf.context, subject: .url("https://teamgram.me/\(username)"), updatedPresentationData: strongSelf.controller?.updatedPresentationData)
                 shareController.completed = { [weak self] peerIds in
                     guard let strongSelf = self else {
                         return
@@ -9531,14 +9531,14 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 content = .linkCopied(title: nil, text: self.presentationData.strings.Conversation_LinkCopied)
             } else if let addressName = peer.addressName {
                 if peer is TelegramChannel {
-                    text = "https://t.me/\(addressName)"
+                    text = "https://teamgram.me/\(addressName)"
                     content = .linkCopied(title: nil, text: self.presentationData.strings.Conversation_LinkCopied)
                 } else {
                     text = "@" + addressName
                     content = .copy(text: self.presentationData.strings.Conversation_UsernameCopied)
                 }
             } else {
-                text = "https://t.me/@id\(peer.id.id._internalGetInt64Value())"
+                text = "https://teamgram.me/@id\(peer.id.id._internalGetInt64Value())"
                 content = .linkCopied(title: nil, text: self.presentationData.strings.Conversation_LinkCopied)
             }
         
@@ -10399,7 +10399,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             guard !url.isEmpty else {
                 return
             }
-            self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: !url.hasPrefix("tg://") && !url.contains("?start="), presentationData: self.context.sharedContext.currentPresentationData.with({$0}), navigationController: controller.navigationController as? NavigationController, dismissInput: {})
+            self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: !url.hasPrefix("tg2://") && !url.contains("?start="), presentationData: self.context.sharedContext.currentPresentationData.with({$0}), navigationController: controller.navigationController as? NavigationController, dismissInput: {})
         case .stars:
             if let starsContext = self.controller?.starsContext {
                 push(self.context.sharedContext.makeStarsTransactionsScreen(context: self.context, starsContext: starsContext))

@@ -2867,7 +2867,7 @@ public class GiftViewScreen: ViewControllerComponentContainer {
                     shareStory(gift)
                 }
             }
-            let link = "https://t.me/nft/\(gift.slug)"
+            let link = "https://teamgram.me/nft/\(gift.slug)"
             let shareController = context.sharedContext.makeShareController(
                 context: context,
                 subject: .url(link),
@@ -2969,7 +2969,7 @@ public class GiftViewScreen: ViewControllerComponentContainer {
             }
             
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let link = "https://t.me/nft/\(gift.slug)"
+            let link = "https://teamgram.me/nft/\(gift.slug)"
             
             let _ = (context.engine.data.get(
                 TelegramEngine.EngineData.Item.Peer.Peer(id: arguments.peerId ?? context.account.peerId)

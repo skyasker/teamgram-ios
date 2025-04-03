@@ -1794,7 +1794,7 @@ private final class PremiumIntroScreenContentComponent: CombinedComponent {
                             if let _ = giftCode.usedDate {
                                 textString = strings.Premium_Gift_UsedLink_Text
                             } else {
-                                link = "https://t.me/giftcode/\(giftCode.slug)"
+                                link = "https://teamgram.me/giftcode/\(giftCode.slug)"
                                 textString = strings.Premium_Gift_Link_Text
                             }
                         } else {
@@ -2628,7 +2628,7 @@ private final class PremiumIntroScreenContentComponent: CombinedComponent {
                 layoutOptions()
             } else if case let .gift(fromPeerId, _, _, giftCode) = context.component.source {
                 if let giftCode, fromPeerId != context.component.context.account.peerId, !context.component.justBought {
-                    let link = "https://t.me/giftcode/\(giftCode.slug)"
+                    let link = "https://teamgram.me/giftcode/\(giftCode.slug)"
                     let linkButton = linkButton.update(
                         component: Button(
                             content: AnyComponent(
@@ -2742,7 +2742,7 @@ private final class PremiumIntroScreenContentComponent: CombinedComponent {
                             let controller = controller() as? PremiumIntroScreen, let navigationController = controller.navigationController as? NavigationController {
                             if url.hasPrefix("https://apps.apple.com/account/subscriptions") {
                                 controller.context.sharedContext.applicationBindings.openSubscriptions()
-                            } else if url.hasPrefix("https://") || url.hasPrefix("tg://") {
+                            } else if url.hasPrefix("https://") || url.hasPrefix("tg2://") {
                                 controller.context.sharedContext.openExternalUrl(context: controller.context, urlContext: .generic, url: url, forceExternal: false, presentationData: controller.context.sharedContext.currentPresentationData.with({$0}), navigationController: navigationController, dismissInput: {})
                             } else {
                                 let context = controller.context

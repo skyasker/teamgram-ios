@@ -1017,7 +1017,7 @@ public class SendInviteLinkScreen: ViewControllerComponentContainer {
         
         var link = link
         if link == nil, let addressName = peer.addressName {
-            link = "https://t.me/\(addressName)"
+            link = "https://teamgram.me/\(addressName)"
         }
         
         #if DEBUG

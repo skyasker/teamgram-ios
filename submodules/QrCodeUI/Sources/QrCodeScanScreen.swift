@@ -599,9 +599,9 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
             let filteredCodes: [CameraCode]
             switch strongSelf.subject {
                 case .authTransfer:
-                    filteredCodes = codes.filter { $0.message.hasPrefix("tg://") }
+                    filteredCodes = codes.filter { $0.message.hasPrefix("tg2://") }
                 case .peer:
-                    filteredCodes = codes.filter { $0.message.hasPrefix("https://t.me/") || $0.message.hasPrefix("t.me/") }
+                    filteredCodes = codes.filter { $0.message.hasPrefix("https://teamgram.me/") || $0.message.hasPrefix("teamgram.me/") }
                 case .cryptoAddress:
                     filteredCodes = codes.filter { $0.message.hasPrefix("ton://") }
                 case .custom:

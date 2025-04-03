@@ -43,14 +43,14 @@ public final class QrCodeScreen: ViewController {
         var link: String {
             switch self {
                 case let .peer(peer):
-                    return "https://t.me/\(peer.addressName ?? "")"
+                    return "https://teamgram.me/\(peer.addressName ?? "")"
                 case let .invite(invite, _):
                     return invite.link ?? ""
                 case let .chatFolder(slug):
                     if slug.hasPrefix("https://") {
                         return slug
                     } else {
-                        return "https://t.me/addlist/\(slug)"
+                        return "https://teamgram.me/addlist/\(slug)"
                     }
             }
         }

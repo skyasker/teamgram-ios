@@ -1465,7 +1465,7 @@ final class VoiceChatControllerImpl: ViewController, VoiceChatController {
                             if let link = inviteLinks?.listenerLink {
                                 return link
                             } else if let peer = peer, let addressName = peer.addressName, !addressName.isEmpty {
-                                return "https://t.me/\(addressName)"
+                                return "https://teamgram.me/\(addressName)"
                             } else if let link = exportedInvitation?.link {
                                 return link
                             } else {
@@ -3669,7 +3669,7 @@ final class VoiceChatControllerImpl: ViewController, VoiceChatController {
                         if let inviteLinks = inviteLinks {
                             return inviteLinks
                         } else if let peer = peer, let addressName = peer.addressName, !addressName.isEmpty {
-                            return GroupCallInviteLinks(listenerLink: "https://t.me/\(addressName)?voicechat", speakerLink: nil)
+                            return GroupCallInviteLinks(listenerLink: "https://teamgram.me/\(addressName)?voicechat", speakerLink: nil)
                         } else if let link = exportedInvitation?.link {
                             return GroupCallInviteLinks(listenerLink: link, speakerLink: nil)
                         }

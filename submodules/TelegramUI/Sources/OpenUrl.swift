@@ -113,7 +113,7 @@ public func parseConfirmationCodeUrl(sharedContext: SharedAccountContext, url: U
             return code
         }
     }
-    if url.scheme == "tg" {
+    if url.scheme == "tg2" {
         if let host = url.host, let query = url.query, let parsedUrl = parseInternalUrl(sharedContext: sharedContext, context: nil, query: host + "?" + query) {
             switch parsedUrl {
                 case let .confirmationCode(code):
@@ -251,7 +251,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
             |> deliverOnMainQueue).startStandalone(next: handleResolvedUrl)
         }
         
-        if let scheme = parsedUrl.scheme, (scheme == "tg" || scheme == context.sharedContext.applicationBindings.appSpecificScheme) {
+        if let scheme = parsedUrl.scheme, (scheme == "tg2" || scheme == context.sharedContext.applicationBindings.appSpecificScheme) {
             if parsedUrl.host == "tonsite" {
                 if let value = URL(string: "tonsite:/" + parsedUrl.path) {
                     parsedUrl = value
@@ -259,7 +259,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
             }
         }
         
-        if let scheme = parsedUrl.scheme, (scheme == "tg" || scheme == context.sharedContext.applicationBindings.appSpecificScheme) {
+        if let scheme = parsedUrl.scheme, (scheme == "tg2" || scheme == context.sharedContext.applicationBindings.appSpecificScheme) {
             var convertedUrl: String?
             if let query = parsedUrl.query {
                 if parsedUrl.host == "localpeer" {
@@ -295,7 +295,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let invite = invite {
-                            convertedUrl = "https://t.me/joinchat/\(invite)"
+                            convertedUrl = "https://teamgram.me/joinchat/\(invite)"
                         }
                     }
                 } else if parsedUrl.host == "addstickers" {
@@ -311,7 +311,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let set = set {
-                            convertedUrl = "https://t.me/addstickers/\(set)"
+                            convertedUrl = "https://teamgram.me/addstickers/\(set)"
                         }
                     }
                 } else if parsedUrl.host == "addemoji" {
@@ -327,7 +327,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let set = set {
-                            convertedUrl = "https://t.me/addemoji/\(set)"
+                            convertedUrl = "https://teamgram.me/addemoji/\(set)"
                         }
                     }
                 } else if parsedUrl.host == "invoice" {
@@ -343,7 +343,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let slug = slug {
-                            convertedUrl = "https://t.me/invoice/\(slug)"
+                            convertedUrl = "https://teamgram.me/invoice/\(slug)"
                         }
                     }
                 } else if parsedUrl.host == "setlanguage" {
@@ -359,7 +359,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let lang = lang {
-                            convertedUrl = "https://t.me/setlanguage/\(lang)"
+                            convertedUrl = "https://teamgram.me/setlanguage/\(lang)"
                         }
                     }
                 } else if parsedUrl.host == "msg" {
@@ -398,7 +398,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let shareUrl = shareUrl {
-                            var resultUrl = "https://t.me/share/url?url=\(urlEncodedStringFromString(shareUrl))"
+                            var resultUrl = "https://teamgram.me/share/url?url=\(urlEncodedStringFromString(shareUrl))"
                             if let shareText = shareText {
                                 resultUrl += "&text=\(urlEncodedStringFromString(shareText))"
                             }
@@ -434,7 +434,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                         }
                         
                         if let server = server, !server.isEmpty, let port = port, let _ = Int32(port) {
-                            var result = "https://t.me/proxy?proxy=\(server)&port=\(port)"
+                            var result = "https://teamgram.me/proxy?proxy=\(server)&port=\(port)"
                             if let user = user {
                                 result += "&user=\((user as NSString).addingPercentEncoding(withAllowedCharacters: CharacterSet.urlQueryValueAllowed) ?? "")"
                                 if let pass = pass {
@@ -568,7 +568,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             return
                         }
                         if let code = code {
-                            convertedUrl = "https://t.me/login/\(code)"
+                            convertedUrl = "https://teamgram.me/login/\(code)"
                         }
                     }
                 } else if parsedUrl.host == "contact" {
@@ -584,7 +584,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let token = token {
-                            convertedUrl = "https://t.me/contact/\(token)"
+                            convertedUrl = "https://teamgram.me/contact/\(token)"
                         }
                     }
                 } else if parsedUrl.host == "confirmphone" {
@@ -603,7 +603,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let phone = phone, let hash = hash {
-                            convertedUrl = "https://t.me/confirmphone?phone=\(phone)&hash=\(hash)"
+                            convertedUrl = "https://teamgram.me/confirmphone?phone=\(phone)&hash=\(hash)"
                         }
                     }
                 } else if parsedUrl.host == "bg" {
@@ -636,7 +636,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             queryString = "?\(query.joined(separator: "&"))"
                         }
                         if let parameter = parameter {
-                            convertedUrl = "https://t.me/bg/\(parameter)\(queryString)"
+                            convertedUrl = "https://teamgram.me/bg/\(parameter)\(queryString)"
                         }
                     }
                 } else if parsedUrl.host == "addtheme" {
@@ -652,7 +652,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let parameter = parameter {
-                            convertedUrl = "https://t.me/addtheme/\(parameter)"
+                            convertedUrl = "https://teamgram.me/addtheme/\(parameter)"
                         }
                     }
                 } else if parsedUrl.host == "nft" {
@@ -668,7 +668,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let slug {
-                            convertedUrl = "https://t.me/nft/\(slug)"
+                            convertedUrl = "https://teamgram.me/nft/\(slug)"
                         }
                     }
                 } else if parsedUrl.host == "privatepost" {
@@ -692,12 +692,12 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                         if let channelId = channelId {
                             if let postId = postId {
                                 if let threadId = threadId {
-                                    convertedUrl = "https://t.me/c/\(channelId)/\(threadId)/\(postId)"
+                                    convertedUrl = "https://teamgram.me/c/\(channelId)/\(threadId)/\(postId)"
                                 } else {
-                                    convertedUrl = "https://t.me/c/\(channelId)/\(postId)"
+                                    convertedUrl = "https://teamgram.me/c/\(channelId)/\(postId)"
                                 }
                             } else if let threadId = threadId {
-                                convertedUrl = "https://t.me/c/\(channelId)/\(threadId)"
+                                convertedUrl = "https://teamgram.me/c/\(channelId)/\(threadId)"
                             }
                         }
                     }
@@ -714,7 +714,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let slug {
-                            convertedUrl = "https://t.me/giftcode/\(slug)"
+                            convertedUrl = "https://teamgram.me/giftcode/\(slug)"
                         }
                     }
                 } else if parsedUrl.host == "message" {
@@ -730,7 +730,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let parameter {
-                            convertedUrl = "https://t.me/m/\(parameter)"
+                            convertedUrl = "https://teamgram.me/m/\(parameter)"
                         }
                     }
                 }
@@ -808,13 +808,13 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                         }
                         
                         if let phone = phone {
-                            var result = "https://t.me/+\(phone)"
+                            var result = "https://teamgram.me/+\(phone)"
                             if let text = text {
                                 result += "?text=\(text)"
                             }
                             convertedUrl = result
                         } else if let domain = domain {
-                            var result = "https://t.me/\(domain)"
+                            var result = "https://teamgram.me/\(domain)"
                             if let appName {
                                 result += "/\(appName)"
                             }
@@ -974,7 +974,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let slug = slug {
-                            convertedUrl = "https://t.me/addlist/\(slug)"
+                            convertedUrl = "https://teamgram.me/addlist/\(slug)"
                         }
                     }
                 } else if parsedUrl.host == "boost" {
@@ -993,9 +993,9 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                             }
                         }
                         if let domain {
-                            convertedUrl = "https://t.me/\(domain)?boost"
+                            convertedUrl = "https://teamgram.me/\(domain)?boost"
                         } else if let channel {
-                            convertedUrl = "https://t.me/c/\(channel)?boost"
+                            convertedUrl = "https://teamgram.me/c/\(channel)?boost"
                         }
                     }
                 }

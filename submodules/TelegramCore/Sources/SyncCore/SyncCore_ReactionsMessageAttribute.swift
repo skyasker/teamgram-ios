@@ -408,7 +408,7 @@ public final class ReactionsMessageAttribute: Equatable, MessageAttribute {
     
     required public init(decoder: PostboxDecoder) {
         self.canViewList = decoder.decodeBoolForKey("vl", orElse: true)
-        self.isTags = decoder.decodeBoolForKey("tg", orElse: false)
+        self.isTags = decoder.decodeBoolForKey("tg2", orElse: false)
         self.reactions = decoder.decodeObjectArrayWithDecoderForKey("r")
         self.recentPeers = decoder.decodeObjectArrayWithDecoderForKey("rp")
         self.topPeers = decoder.decodeObjectArrayWithDecoderForKey("tp")
@@ -416,7 +416,7 @@ public final class ReactionsMessageAttribute: Equatable, MessageAttribute {
     
     public func encode(_ encoder: PostboxEncoder) {
         encoder.encodeBool(self.canViewList, forKey: "vl")
-        encoder.encodeBool(self.isTags, forKey: "tg")
+        encoder.encodeBool(self.isTags, forKey: "tg2")
         encoder.encodeObjectArray(self.reactions, forKey: "r")
         encoder.encodeObjectArray(self.recentPeers, forKey: "rp")
         encoder.encodeObjectArray(self.topPeers, forKey: "tp")
