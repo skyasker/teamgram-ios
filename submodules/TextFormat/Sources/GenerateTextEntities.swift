@@ -4,12 +4,8 @@ import TelegramCore
 import Emoji
 
 private let whitelistedHosts: Set<String> = Set([
-    "telegram.org",
-    "t.me",
-    "telegram.me",
-    "telegra.ph",
-    "telesco.pe",
-    "fragment.com"
+    "teamgram.net",
+    "teamgram.me"
 ])
 
 private let dataDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType([.link]).rawValue)

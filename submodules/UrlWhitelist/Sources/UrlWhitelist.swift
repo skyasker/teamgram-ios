@@ -18,7 +18,7 @@ public func isConcealedUrlWhitelisted(_ url: URL) -> Bool {
             return true
         }
     }
-    if let host = url.host?.lowercased(), host == "telegram.org" {
+    if let host = url.host?.lowercased(), host == "teamgram.net" {
         let whitelistedNativePrefixes: Set<String> = Set([
             "/blog/",
             "/tour/"

@@ -27,7 +27,7 @@
     if (self) {
         _additionalPaymentMethods = STPPaymentMethodTypeAll;
         _requiredBillingAddressFields = STPBillingAddressFieldsNone;
-        _companyName = @"Telegram";
+        _companyName = @"Teamgram";
         _smsAutofillDisabled = NO;
     }
     return self;

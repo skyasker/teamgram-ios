@@ -761,7 +761,7 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
             pushControllerImpl?(QrCodeScanScreen(context: context, subject: .authTransfer(activeSessionsContext: activeSessionsContext)))
         })
     }, openOtherAppsUrl: {
-        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://telegram.org/apps", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
+        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://teamgram.net/apps", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     }, setupAuthorizationTTL: {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         let controller = ActionSheetController(presentationData: presentationData)
@@ -789,9 +789,9 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
         ])
         presentControllerImpl?(controller, nil)
     }, openDesktopLink: {
-        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://getdesktop.telegram.org", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
+        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://teamgram.net/desktop", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     }, openWebLink: {
-        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://web.telegram.org", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
+        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://web.teamgram.net", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     })
     
     let previousMode = Atomic<RecentSessionsMode>(value: .sessions)

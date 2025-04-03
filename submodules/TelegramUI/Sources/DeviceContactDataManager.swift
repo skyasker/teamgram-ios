@@ -67,7 +67,7 @@ private final class DeviceContactDataModernContext: DeviceContactDataContext {
             let stableIdAndContact = DeviceContactDataModernContext.parseContact(contact)
             result[stableIdAndContact.0] = stableIdAndContact.1
             for address in contact.urlAddresses {
-                if address.label == "Telegram", let peerId = parseAppSpecificContactReference(address.value as String) {
+                if address.label == "Teamgram", let peerId = parseAppSpecificContactReference(address.value as String) {
                     references[peerId] = DeviceContactBasicDataWithReference(stableId: stableIdAndContact.0, basicData: stableIdAndContact.1)
                 }
             }
