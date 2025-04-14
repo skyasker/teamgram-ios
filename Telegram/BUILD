@@ -408,7 +408,7 @@ plist_fragment(
             <string>{telegram_bundle_id}</string>
             <key>CFBundleURLSchemes</key>
             <array>
-                <string>telegram</string>
+                <string>teamgram</string>
             </array>
         </dict>
         <dict>
@@ -418,7 +418,7 @@ plist_fragment(
             <string>{telegram_bundle_id}.compatibility</string>
             <key>CFBundleURLSchemes</key>
             <array>
-                <string>tg</string>
+                <string>tg2</string>
                 <string>tonsite</string>
             </array>
         </dict>
@@ -505,9 +505,8 @@ icloud_fragment = "" if not telegram_enable_icloud else """
 associated_domains_fragment = "" if telegram_bundle_id not in official_bundle_ids else """
 <key>com.apple.developer.associated-domains</key>
 <array>
-    <string>applinks:telegram.me</string>
-    <string>applinks:t.me</string>
-    <string>applinks:*.t.me</string>
+    <string>applinks:teamgram.me</string>
+    <string>applinks:*.teamgram.me</string>
 </array>
 """
 
@@ -648,7 +647,7 @@ plist_fragment(
     template =
     """
     <key>CFBundleDisplayName</key>
-    <string>Telegram</string>
+    <string>Teamgram</string>
     """
 )
 
@@ -1765,11 +1764,11 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Telegram</string>
+    <string>Teamgram</string>
     <key>CFBundleIdentifier</key>
     <string>{telegram_bundle_id}</string>
     <key>CFBundleName</key>
-    <string>Telegram</string>
+    <string>Teamgram</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
