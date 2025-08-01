@@ -75,6 +75,8 @@ final class NetworkFrameworkTcpConnectionInterface: NSObject, MTTcpConnectionInt
                 assertionFailure("A connection already exists")
                 return
             }
+
+            print("网络连接开始 connect to \(host):\(port) with timeout \(timeout)")
             
             let host = NWEndpoint.Host(host)
             let port = NWEndpoint.Port(rawValue: port)!
@@ -276,6 +278,7 @@ final class NetworkFrameworkTcpConnectionInterface: NSObject, MTTcpConnectionInt
                 self.connectTimeoutTimer = nil
                 connectTimeoutTimer.invalidate()
             }
+            print("网络连接断开，错误：\(String(describing: error))")
             
             if !self.reportedDisconnection {
                 self.reportedDisconnection = true

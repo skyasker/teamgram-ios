@@ -143,32 +143,53 @@ private final class TempBoxContexts {
 }
 
 private var sharedValue: TempBox?
-
 public final class TempBox {
+    // 基础路径
     private let basePath: String
+    // 进程类型
     private let processType: String
+    // 启动特定ID
     private let launchSpecificId: Int64
+    // 当前基础路径
     private let currentBasePath: String
     
+    // 使用原子操作管理临时文件上下文
     private let contexts = Atomic<TempBoxContexts>(value: TempBoxContexts())
     
+    /// 初始化共享的TempBox实例
+    /// - Parameters:
+    ///   - basePath: 基础路径
+    ///   - processType: 进程类型
+    ///   - launchSpecificId: 启动特定ID
     public static func initializeShared(basePath: String, processType: String, launchSpecificId: Int64) {
         sharedValue = TempBox(basePath: basePath, processType: processType, launchSpecificId: launchSpecificId)
     }
     
+    /// 获取共享的TempBox实例
     public static var shared: TempBox {
         return sharedValue!
     }
     
+    /// 私有初始化方法
+    /// - Parameters:
+    ///   - basePath: 基础路径
+    ///   - processType: 进程类型
+    ///   - launchSpecificId: 启动特定ID
     private init(basePath: String, processType: String, launchSpecificId: Int64) {
         self.basePath = basePath
         self.processType = processType
         self.launchSpecificId = launchSpecificId
         
+        // 创建当前基础路径
         self.currentBasePath = basePath + "/temp/" + processType + "/temp-" + String(UInt64(bitPattern: launchSpecificId), radix: 16)
+        // 清理之前启动的临时文件
         self.cleanupPreviousLaunches(path: basePath + "/temp/" + processType, currentLaunchSpecificId: launchSpecificId)
     }
     
+    /// 清理之前启动产生的临时文件
+    /// - Parameters:
+    ///   - path: 临时文件路径
+    ///   - currentLaunchSpecificId: 当前启动ID
     private func cleanupPreviousLaunches(path: String, currentLaunchSpecificId: Int64) {
         DispatchQueue.global(qos: .background).async {
             let currentName = "temp-" + String(UInt64(bitPattern: currentLaunchSpecificId), radix: 16)
@@ -182,24 +203,36 @@ public final class TempBox {
         }
     }
     
+    /// 根据已有文件路径创建临时文件
+    /// - Parameters:
+    ///   - path: 源文件路径
+    ///   - fileName: 文件名
+    /// - Returns: 临时文件对象
     public func file(path: String, fileName: String) -> TempBoxFile {
         return self.contexts.with { contexts in
             return contexts.file(basePath: self.currentBasePath, path: path, fileName: fileName)
         }
     }
     
+    /// 创建新的临时文件
+    /// - Parameter fileName: 文件名
+    /// - Returns: 临时文件对象
     public func tempFile(fileName: String) -> TempBoxFile {
         return self.contexts.with { contexts in
             return contexts.tempFile(basePath: self.currentBasePath, fileName: fileName)
         }
     }
     
+    /// 创建临时目录
+    /// - Returns: 临时目录对象
     public func tempDirectory() -> TempBoxDirectory {
         return self.contexts.with { contexts in
             return contexts.tempDirectory(basePath: self.currentBasePath)
         }
     }
     
+    /// 释放临时文件
+    /// - Parameter file: 要释放的临时文件
     public func dispose(_ file: TempBoxFile) {
         let removePaths = self.contexts.with { contexts in
             return contexts.dispose(file)
@@ -213,6 +246,8 @@ public final class TempBox {
         }
     }
     
+    /// 释放临时目录
+    /// - Parameter directory: 要释放的临时目录
     public func dispose(_ directory: TempBoxDirectory) {
         let removePaths = self.contexts.with { contexts in
             return contexts.dispose(directory)

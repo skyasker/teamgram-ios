@@ -37,10 +37,14 @@ openssl rand -hex 8
 
 ```
 python3 build-system/Make/Make.py \
-    --cacheDir="$HOME/telegram-bazel-cache" \
+    --cacheDir="/Users/xsun/x/apple/teamgram-ios/tmp/telegram-bazel-cache" \
     generateProject \
     --configurationPath=build-system/template_minimal_development_configuration.json \
     --xcodeManagedCodesigning
+
+python3 build-system/Make/Make.py \
+    --cacheDir="/Users/xsun/x/apple/teamgram-ios/tmp/telegram-bazel-cache" \
+    clean
 ```
 
 # Advanced Compilation Guide

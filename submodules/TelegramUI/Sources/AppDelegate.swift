@@ -265,6 +265,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private var watchedCallsDisposables = DisposableSet()
     
     private var _notificationTokenPromise: Promise<Data>?
+    // 有两个消费者，一个是设置voipDeviceToken，一个是作为SharedAccountContextImpl的voipDeviceToken
+    // 生产者是ios PKPushRegistryDelegate的pushRegistry(_:didUpdate)
     private let voipTokenPromise = Promise<Data>()
     
     private var firebaseSecrets: [String: String] = [:] {
@@ -304,6 +306,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     
     private var pendingUrlSessionBackgroundEventsCompletion: (() -> Void)?
     
+    // 和voipTokenPromise类似，作为SharedAccountContextImpl的notificationToken
+    // 生产者是ios UNUserNotificationCenterDelegate的userNotificationCenter(_:didRegisterForRemoteNotificationsWithDeviceToken:)
     private var notificationTokenPromise: Promise<Data> {
         if let current = self._notificationTokenPromise {
             return current
@@ -321,11 +325,19 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     
     private var alertActions: (primary: (() -> Void)?, other: (() -> Void)?)?
     
+    // 被两个tokenPromise设置
     private let voipDeviceToken = Promise<Data?>(nil)
+    // 被 NetworkInitializationArguments 使用
     private let regularDeviceToken = Promise<Data?>(nil)
     
     private var recaptchaClientsBySiteKey: [String: Promise<RecaptchaClient>] = [:]
         
+    /// A description
+    /// - Parameters:
+    ///   - application:
+    ///   - launchOptions:
+    ///
+    /// - Returns:
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         precondition(!testIsLaunched)
         testIsLaunched = true
@@ -337,34 +349,46 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             self.regularDeviceToken.set(.single(token))
         })
         
+        print("开始初始化应用窗口")
+        // 统计app启动耗时
+        // 结束时间点：
         let launchStartTime = CFAbsoluteTimeGetCurrent()
-        
+
+        // 还会在 TelegramApplicationBindings 中使用到,用户判断是否是topWindow
         let statusBarHost = ApplicationStatusBarHost()
+
+        // hostView看来只是用来设置背景色的
         let (window, hostView) = nativeWindowHostView()
         self.mainWindow = Window1(hostView: hostView, statusBarHost: statusBarHost)
+        // 根据设备当前的界面风格设置窗口背景颜色
         if let traitCollection = window.rootViewController?.traitCollection {
             if #available(iOS 13.0, *) {
-                switch traitCollection.userInterfaceStyle {
-                case .light, .unspecified:
-                    hostView.containerView.backgroundColor = UIColor.white
-                default:
-                    hostView.containerView.backgroundColor = UIColor.black
-                }
-            } else {
+            switch traitCollection.userInterfaceStyle {
+            case .light, .unspecified:
+                // 浅色模式或未指定时使用白色背景
                 hostView.containerView.backgroundColor = UIColor.white
+            default:
+                // 深色模式使用黑色背景
+                hostView.containerView.backgroundColor = UIColor.black
+            }
+            } else {
+            // iOS 13.0以下版本不支持深色模式，统一使用白色背景
+            hostView.containerView.backgroundColor = UIColor.white
             }
         } else {
+            // 如果无法获取traitCollection（极少情况），默认使用白色背景
             hostView.containerView.backgroundColor = UIColor.white
         }
         self.window = window
         self.nativeWindow = window
         
         hostView.containerView.layer.addSublayer(MetalEngine.shared.rootLayer)
-        
+        print("窗口初始化完成")
         if !UIDevice.current.isBatteryMonitoringEnabled {
             UIDevice.current.isBatteryMonitoringEnabled = true
         }
-        
+        // 在 SharedNotificationManager 中会使用到
+        // 在 applicationWillResignActive 中会使用到
         let clearNotificationsManager = ClearNotificationsManager(getNotificationIds: { completion in
             if #available(iOS 10.0, *) {
                 UNUserNotificationCenter.current().getDeliveredNotifications(completionHandler: { notifications in
@@ -470,6 +494,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         })
         self.clearNotificationsManager = clearNotificationsManager
         
+        print("开始获取app相关配置")
         let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
         
         let baseAppBundleId = Bundle.main.bundleIdentifier!
@@ -483,7 +508,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let apiId: Int32 = buildConfig.apiId
         let apiHash: String = buildConfig.apiHash
         let languagesCategory = "ios"
-        
+        print("app相关配置获取完成")
+
+        print("开始获取自动锁定时间")
         let autolockDeadine: Signal<Int32?, NoError>
         if #available(iOS 10.0, *) {
             autolockDeadine = .single(nil)
@@ -496,7 +523,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 return context.context.sharedContext.appLockContext.autolockDeadline
             }
         }
+        print("自动锁定时间获取完成")
         
+        print("开始初始化网络参数")
         let networkArguments = NetworkInitializationArguments(apiId: apiId, apiHash: apiHash, languagesCategory: languagesCategory, appVersion: appVersion, voipMaxLayer: PresentationCallManagerImpl.voipMaxLayer, voipVersions: PresentationCallManagerImpl.voipVersions(includeExperimental: true, includeReference: false).map { version, supportsVideo -> CallSessionManagerImplementationVersion in
             CallSessionManagerImplementationVersion(version: version, supportsVideo: supportsVideo)
         }, appData: self.regularDeviceToken.get()
@@ -571,7 +600,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             }
             |> runOn(Queue.mainQueue())
         }, autolockDeadine: autolockDeadine, encryptionProvider: OpenSSLEncryptionProvider(), deviceModelName: nil, useBetaFeatures: !buildConfig.isAppStoreBuild, isICloudEnabled: buildConfig.isICloudEnabled)
-        
+        print("网络参数初始化完成")
+
         guard let appGroupUrl = maybeAppGroupUrl else {
             self.mainWindow?.presentNative(UIAlertController(title: nil, message: "Error 2", preferredStyle: .alert))
             return true
@@ -593,47 +623,68 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
         
         let rootPath = rootPathForBasePath(appGroupUrl.path)
+        print("开始performAppGroupUpgrades")
         performAppGroupUpgrades(appGroupPath: appGroupUrl.path, rootPath: rootPath)
-        
+        print("performAppGroupUpgrades完成")
+
         let deviceSpecificEncryptionParameters = BuildConfig.deviceSpecificEncryptionParameters(rootPath, baseAppBundleId: baseAppBundleId)
         let encryptionParameters = ValueBoxEncryptionParameters(forceEncryptionIfNoSet: false, key: ValueBoxEncryptionParameters.Key(data: deviceSpecificEncryptionParameters.key)!, salt: ValueBoxEncryptionParameters.Salt(data: deviceSpecificEncryptionParameters.salt)!)
-        
+
+
+        print("开始测试设备存储写入能力")
+        // 初始化临时文件夹管理器
         TempBox.initializeShared(basePath: rootPath, processType: "app", launchSpecificId: Int64.random(in: Int64.min ... Int64.max))
-        
+
+        // 创建一个临时文件用于测试设备存储写入能力
         let writeAbilityTestFile = TempBox.shared.tempFile(fileName: "test.bin")
         var writeAbilityTestSuccess = true
         if let testFile = ManagedFile(queue: nil, path: writeAbilityTestFile.path, mode: .readwrite) {
+            // 定义128KB的缓冲区大小
             let bufferSize = 128 * 1024
+            // 分配内存缓冲区
             let randomBuffer = malloc(bufferSize)!
             defer {
+                // 确保在函数退出时释放分配的内存，防止内存泄漏
                 free(randomBuffer)
             }
+            // 用随机数据填充缓冲区
             arc4random_buf(randomBuffer, bufferSize)
             var writtenBytes = 0
+            // 尝试写入1MB的随机数据
             while writtenBytes < 1024 * 1024 {
+                // 写入数据并获取实际写入的字节数
                 let actualBytes = testFile.write(randomBuffer, count: bufferSize)
                 writtenBytes += actualBytes
+                // 如果实际写入的字节数少于预期，说明写入失败
                 if actualBytes != bufferSize {
                     writeAbilityTestSuccess = false
                     break
                 }
             }
+            // 关闭文件
             testFile._unsafeClose()
+            // 删除临时文件
             TempBox.shared.dispose(writeAbilityTestFile)
         } else {
+            // 如果无法创建文件，则测试失败
             writeAbilityTestSuccess = false
         }
-        
+
+        // 如果写入测试失败，显示警告并终止应用程序
         if !writeAbilityTestSuccess {
+            // 创建警告对话框，提示设备存储空间不足
             let alertController = UIAlertController(title: nil, message: "The device does not have sufficient free space.", preferredStyle: .alert)
             alertController.addAction(UIAlertAction(title: "OK", style: .default, handler: { _ in
+                // 点击确定按钮后强制终止应用程序
                 preconditionFailure()
             }))
+            // 显示警告对话框
             self.mainWindow?.presentNative(alertController)
             
             return true
         }
-        
+        print("设备存储写入能力测试完成，结果：\(writeAbilityTestSuccess ? "成功" : "失败")")
+
         let legacyLogs: [String] = [
             "broadcast-logs",
             "siri-logs",
@@ -644,7 +695,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         for item in legacyLogs {
             let _ = try? FileManager.default.removeItem(atPath: "\(rootPath)/\(item)")
         }
-        
+        print("清理遗留日志文件完成: \(rootPath)")
+
+        print("初始化日志系统")
         let logsPath = rootPath + "/logs/app-logs"
         let _ = try? FileManager.default.createDirectory(atPath: logsPath, withIntermediateDirectories: true, attributes: nil)
         Logger.setSharedLogger(Logger(rootPath: rootPath, basePath: logsPath))
@@ -653,13 +706,24 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             Logger.shared.log("ManagedAudioSession", s)
             Logger.shared.shortLog("ManagedAudioSession", s)
         })
-        
+        Logger.shared.log("App \(self.episodeId)", "初始化日志完成: \(rootPath)")
+
         if let contents = try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: rootPath + "/accounts-metadata"), includingPropertiesForKeys: nil, options: [.skipsSubdirectoryDescendants]) {
             for url in contents {
                 Logger.shared.log("App \(self.episodeId)", "metadata: \(url.path)")
             }
         }
-        
+        Logger.shared.log("App \(self.episodeId)", "打印根路径下/accounts-metadata的文件结束")
+
+        /// 遍历根路径下的文件和目录
+        ///
+        /// 此代码段执行以下操作：
+        /// 1. 读取指定根路径下的所有文件和目录
+        /// 2. 遍历所有内容并记录路径
+        /// 3. 特别关注以"account-"开头的目录，进一步检查其子目录内容
+        ///
+        /// - 注意：此方法使用`Logger.shared.log`记录发现的所有路径信息，同时在路径前添加当前实例的`episodeId`
+        /// - 重要：该代码使用可选绑定和`try?`处理可能的文件系统错误，静默忽略任何访问错误
         if let contents = try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: rootPath), includingPropertiesForKeys: nil, options: [.skipsSubdirectoryDescendants]) {
             for url in contents {
                 Logger.shared.log("App \(self.episodeId)", "root: \(url.path)")
@@ -672,9 +736,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
             }
         }
-        
+        Logger.shared.log("App \(self.episodeId)", "打印根路径下的文件和目录结束")
         //ASDisableLogging()
         
+        Logger.shared.log("App \(self.episodeId)", "开始initializeLegacyComponents")
         initializeLegacyComponents(application: application, currentSizeClassGetter: {
             return UIUserInterfaceSizeClass.compact
         }, currentHorizontalClassGetter: {
@@ -686,34 +751,60 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }, openUrl: { url in
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
         })
+        Logger.shared.log("App \(self.episodeId)", "initializeLegacyComponents完成")
+
+        // 设置全局的上下文菜单控制器提供者
+        // 当应用程序需要显示上下文菜单时，会调用这个提供者函数
+        // 这个设置确保整个应用使用统一的ContextMenuControllerImpl实现
+        // arguments包含菜单的配置信息，如位置、项目列表等
+        Logger.shared.log("App \(self.episodeId)", "设置全局上下文菜单控制器提供者")
         setContextMenuControllerProvider { arguments in
             return ContextMenuControllerImpl(arguments)
         }
-        
+        Logger.shared.log("App \(self.episodeId)", "全局上下文菜单控制器提供者设置完成")
+
         if #available(iOS 10.0, *) {
+            // 设置当前应用为通知中心的代理
+            // 这样应用才能处理通知相关事件，如接收通知、通知被点击等
+            // 必须设置此代理才能实现通知交互功能
             UNUserNotificationCenter.current().delegate = self
         }
         
+        Logger.shared.log("App \(self.episodeId)", "设置GlobalExperimentalSettings开始")
         GlobalExperimentalSettings.isAppStoreBuild = buildConfig.isAppStoreBuild
         GlobalExperimentalSettings.enableFeed = false
-        
+        Logger.shared.log("App \(self.episodeId)", "设置GlobalExperimentalSettings完成")
+
+        // 将当前窗口设为主窗口并使其可见
+        // 这个方法结合了makeKey()和makeVisible()两个操作
+        // makeKey()：设置窗口为应用程序的键窗口，接收键盘和非触摸相关事件
+        // makeVisible()：使窗口在屏幕上可见
+        // 这是应用程序启动流程中的最后步骤，确保UI正确显示
         self.window?.makeKeyAndVisible()
-        
+
+        Logger.shared.log("App \(self.episodeId)", "设置音频会话活跃状态信号")
         var hasActiveCalls: Signal<Bool, NoError> = .single(false)
         if CallKitIntegration.isAvailable, let callKitIntegration = CallKitIntegration.shared {
             hasActiveCalls = callKitIntegration.hasActiveCalls
         }
+        // 设置音频会话活跃状态信号
+        // 结合两个信号源：
+        // 1. hasActiveCalls - 是否有活跃的通话
+        // 2. 全局音频会话是否活跃
+        // 当有活跃通话或音频会话活跃时返回true
+
         self.hasActiveAudioSession.set(
             combineLatest(queue: .mainQueue(),
-                hasActiveCalls,
-                MediaManagerImpl.globalAudioSession.isActive()
+            hasActiveCalls,            // 通话状态信号，来自CallKitIntegration
+            MediaManagerImpl.globalAudioSession.isActive()  // 全局音频会话状态信号
             )
             |> map { hasActiveCalls, isActive -> Bool in
-                return hasActiveCalls || isActive
+            return hasActiveCalls || isActive  // 只要有一个为true，就认为音频会话活跃
             }
-            |> distinctUntilChanged
+            |> distinctUntilChanged  // 仅当值发生变化时才发送新信号，避免重复通知
         )
         
+        Logger.shared.log("App \(self.episodeId)", "创建TelegramApplicationBindings")
         let applicationBindings = TelegramApplicationBindings(isMainApp: true, appBundleId: baseAppBundleId, appBuildType: buildConfig.isAppStoreBuild ? .public : .internal, containerPath: appGroupUrl.path, appSpecificScheme: buildConfig.appSpecificUrlScheme, openUrl: { url in
             var parsedUrl = URL(string: url)
             if let parsed = parsedUrl {
@@ -933,25 +1024,48 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             }
         })
         
+        Logger.shared.log("App \(self.episodeId)", "开始创建AccountManager")
         let accountManager = AccountManager<TelegramAccountManagerTypes>(basePath: rootPath + "/accounts-metadata", isTemporary: false, isReadOnly: false, useCaches: true, removeDatabaseOnError: true)
         self.accountManager = accountManager
+        Logger.shared.log("App \(self.episodeId)", "AccountManager创建完成")
 
+        Logger.shared.log("App \(self.episodeId)", "注册所有需要序列化/反序列化的类型")
+        // 注册所有需要序列化/反序列化的类型，确保系统可以正确处理这些类型
+        // 这个函数在 TelegramUIDeclareEncodables 模块中定义，用于声明所有可编码对象
         telegramUIDeclareEncodables()
-        initializeAccountManagement()
         
+        // 初始化账户管理系统
+        // 这个函数设置账户管理相关的组件，包括账户创建、切换和删除的逻辑
+        // 它还可能包括账户数据的持久化存储和恢复功能
+        Logger.shared.log("App \(self.episodeId)", "开始initializeAccountManagement")
+        initializeAccountManagement()
+
+
+        Logger.shared.log("App \(self.episodeId)", "设置PushKit推送注册表")
+        // 初始化PushKit推送注册表，用于处理VoIP推送通知
+        // PushKit提供比普通推送更高优先级的通知，主要用于音视频通话
         let pushRegistry = PKPushRegistry(queue: .main)
         if #available(iOS 9.0, *) {
+            // 设置期望接收的推送类型为VoIP
+            // 这将向苹果推送服务器注册设备，获取VoIP推送令牌
             pushRegistry.desiredPushTypes = Set([.voIP])
         }
+        // 保存pushRegistry的引用，以防止被释放
         self.pushRegistry = pushRegistry
+        // 设置推送代理，用于接收和处理VoIP推送事件
+        // 相关回调方法包括didUpdate(接收token)和didReceiveIncomingPushWith(接收通知)
         pushRegistry.delegate = self
 
+        Logger.shared.log("App \(self.episodeId)", "开始获取账户管理状态")
         self.accountManagerState = extractAccountManagerState(records: accountManager._internalAccountRecordsSync())
         let _ = (accountManager.accountRecords()
         |> deliverOnMainQueue).start(next: { view in
             self.accountManagerState = extractAccountManagerState(records: view)
         })
+        Logger.shared.log("App \(self.episodeId)", "获取账户管理状态完成")
 
+
+        Logger.shared.log("App \(self.episodeId)", "开始初始化SharedApplicationContext信号")
         var systemUserInterfaceStyle: WindowUserInterfaceStyle = .light
         if #available(iOS 13.0, *) {
             if let traitCollection = window.rootViewController?.traitCollection {
@@ -959,22 +1073,26 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             }
         }
         
+
+        // 返回 Signal<InitialPresentationDataAndSettings, NoError>
         let sharedContextSignal = currentPresentationDataAndSettings(accountManager: accountManager, systemUserInterfaceStyle: systemUserInterfaceStyle)
         |> map { initialPresentationDataAndSettings -> (AccountManager, InitialPresentationDataAndSettings) in
             return (accountManager, initialPresentationDataAndSettings)
         }
-        |> deliverOnMainQueue
+        |> deliverOnMainQueue // 确保在主线程上处理信号
         |> mapToSignal { accountManager, initialPresentationDataAndSettings -> Signal<(SharedApplicationContext, LoggingSettings), NoError> in
             self.mainWindow?.hostView.containerView.backgroundColor =  initialPresentationDataAndSettings.presentationData.theme.chatList.backgroundColor
             
             let legacyBasePath = appGroupUrl.path
             
             let presentationDataPromise = Promise<PresentationData>()
+            Logger.shared.log("App \(self.episodeId)", "开始创建AppLockContextImpl")
             let appLockContext = AppLockContextImpl(rootPath: rootPath, window: self.mainWindow!, rootController: self.window?.rootViewController, applicationBindings: applicationBindings, accountManager: accountManager, presentationDataSignal: presentationDataPromise.get(), lockIconInitialFrame: {
                 return (self.mainWindow?.viewController as? TelegramRootController)?.chatListController?.lockViewFrame
             })
             
             var setPresentationCall: ((PresentationCall?) -> Void)?
+            Logger.shared.log("App \(self.episodeId)", "开始创建SharedAccountContextImpl")
             let sharedContext = SharedAccountContextImpl(mainWindow: self.mainWindow, sharedContainerPath: legacyBasePath, basePath: rootPath, encryptionParameters: encryptionParameters, accountManager: accountManager, appLockContext: appLockContext, notificationController: nil, applicationBindings: applicationBindings, initialPresentationDataAndSettings: initialPresentationDataAndSettings, networkArguments: networkArguments, hasInAppPurchases: buildConfig.isAppStoreBuild && buildConfig.apiId == 1, rootPath: rootPath, legacyBasePath: legacyBasePath, apsNotificationToken: self.notificationTokenPromise.get() |> map(Optional.init), voipNotificationToken: self.voipTokenPromise.get() |> map(Optional.init), firebaseSecretStream: self.firebaseSecretStream.get(), setNotificationCall: { call in
                 setPresentationCall?(call)
             }, navigateToChat: { accountId, peerId, messageId in
@@ -1022,8 +1140,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
             }
             
+            Logger.shared.log("App \(self.episodeId)", "开始创建SharedNotificationManager")
             let notificationManager = SharedNotificationManager(episodeId: self.episodeId, application: application, clearNotificationsManager: clearNotificationsManager, inForeground: applicationBindings.applicationInForeground, accounts: sharedContext.activeAccountContexts |> map { primary, accounts, _ in accounts.map({ ($0.1.account, $0.1.account.id == primary?.account.id) }) }, pollLiveLocationOnce: { accountId in
-                let _ = (self.context.get()
+                let _ = (self.context.get() // AuthorizedApplicationContext的promise
                 |> filter {
                     return $0 != nil
                 }
@@ -1080,6 +1199,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     return .single(nil)
                 }
             }*/
+            Logger.shared.log("App \(self.episodeId)", "开始创建SharedWakeupManager")
             let wakeupManager = SharedWakeupManager(beginBackgroundTask: { name, expiration in
                 let id = application.beginBackgroundTask(withName: name, expirationHandler: expiration)
                 Logger.shared.log("App \(self.episodeId)", "Begin background task \(name): \(id)")
@@ -1094,6 +1214,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             }, activeAccounts: sharedContext.activeAccountContexts |> map { ($0.0?.account, $0.1.map { ($0.0, $0.1.account) }) }, liveLocationPolling: liveLocationPolling, watchTasks: .single(nil), inForeground: applicationBindings.applicationInForeground, hasActiveAudioSession: self.hasActiveAudioSession.get(), notificationManager: notificationManager, mediaManager: sharedContext.mediaManager, callManager: sharedContext.callManager, accountUserInterfaceInUse: { id in
                 return sharedContext.accountUserInterfaceInUse(id)
             })
+            Logger.shared.log("App \(self.episodeId)", "开始创建SharedApplicationContext")
             let sharedApplicationContext = SharedApplicationContext(sharedContext: sharedContext, notificationManager: notificationManager, wakeupManager: wakeupManager)
             sharedApplicationContext.sharedContext.mediaManager.overlayMediaManager.attachOverlayMediaController(sharedApplicationContext.overlayMediaController)
             
