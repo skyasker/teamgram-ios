@@ -530,16 +530,16 @@ func initializedNetwork(accountId: AccountRecordId, arguments: NetworkInitializa
             
             if testingEnvironment {
                 seedAddressList = [
-                    1: ["43.155.11.190"]
-                    // 1: ["192.168.0.238"]
+//                    1: ["43.155.11.190"]
+                     1: ["192.168.0.151"]
                     // 1: ["149.154.175.10"],
                     // 2: ["149.154.167.40"],
                     // 3: ["149.154.175.117"]
                 ]
             } else {
                 seedAddressList = [
-                    1: ["43.155.11.190"]
-                    // 1: ["192.168.0.238"]
+//                    1: ["43.155.11.190"]
+                     1: ["192.168.0.151"]
                     // 1: ["149.154.175.50", "2001:b28:f23d:f001::a"],
                     // 2: ["149.154.167.50", "95.161.76.100", "2001:67c:4e8:f002::a"],
                     // 3: ["149.154.175.100", "2001:b28:f23d:f003::a"],
@@ -1110,15 +1110,15 @@ public final class Network: NSObject, MTRequestMessageServiceDelegate {
                 }
             }
             
-            Logger.shared.log("网络 ---->>>>", "request \(data.0.name)")
+            // Logger.shared.log("网络 ---->>>>", "request \(data.0.name)")
 
             request.completed = { (boxedResponse, timestamp, error) -> () in
                 if let error = error {
-                    Logger.shared.log("网络 <<<<----", "error \(error)")
+                    // Logger.shared.log("网络 <<<<----", "error \(error)")
                     subscriber.putError(error)
                 } else {
                     if let result = (boxedResponse as! BoxedMessage).body as? T {
-                        Logger.shared.log("网络 <<<<----", "result \(result)")
+                        // Logger.shared.log("网络 <<<<----", "result \(result)")
                         subscriber.putNext(.result(result))
                         subscriber.putCompletion()
                     }
@@ -1174,15 +1174,15 @@ public final class Network: NSObject, MTRequestMessageServiceDelegate {
                 return true
             }
             
-            Logger.shared.log("网络 ---->>>>", "request \(data.0.name)")
+            // Logger.shared.log("网络 ---->>>>", "request \(data.0.name)")
 
             request.completed = { (boxedResponse, timestamp, error) -> () in
                 if let error = error {
-                    Logger.shared.log("网络 <<<<----", "error \(error)")
+                    // Logger.shared.log("网络 <<<<----", "error \(error)")
                     subscriber.putError(error)
                 } else {
                     if let result = (boxedResponse as! BoxedMessage).body as? T {
-                        Logger.shared.log("网络 <<<<----", "result \(result)")
+                        // Logger.shared.log("网络 <<<<----", "result \(result)")
                         subscriber.putNext(result)
                         subscriber.putCompletion()
                     }

@@ -199,6 +199,20 @@ private struct AccountManagerState {
     var notificationKeys: [NotificationKey]
 }
 
+
+/// 提取账户管理器状态。
+///
+/// 此方法从 `AccountRecordsView<TelegramAccountManagerTypes>` 类型的 `records` 中提取通知密钥信息，
+/// 并生成一个 `AccountManagerState` 实例。具体流程如下：
+/// - 遍历所有账户记录（`records.records`）。
+/// - 对每个账户记录，遍历其属性（`attributes`）。
+/// - 查找属性类型为 `.backupData` 的项，并尝试获取其中的 `notificationEncryptionKeyId` 和 `notificationEncryptionKey`。
+/// - 如果成功获取到密钥 ID 和密钥，则构造一个 `AccountManagerState.NotificationKey`，
+///   其中包含账户 ID、密钥 ID 和密钥本身。
+/// - 最终返回包含所有有效通知密钥的 `AccountManagerState`。
+///
+/// - Parameter records: 包含账户记录的视图对象。
+/// - Returns: 包含所有有效通知密钥的账户管理器状态对象。
 private func extractAccountManagerState(records: AccountRecordsView<TelegramAccountManagerTypes>) -> AccountManagerState {
     return AccountManagerState(
         notificationKeys: records.records.compactMap { record -> AccountManagerState.NotificationKey? in
@@ -1060,9 +1074,26 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         self.accountManagerState = extractAccountManagerState(records: accountManager._internalAccountRecordsSync())
         let _ = (accountManager.accountRecords()
         |> deliverOnMainQueue).start(next: { view in
+            Logger.shared.log("App \(self.episodeId)", "监听到账户管理状态变化：\(String(describing: view))")
+            // 详细打印 AccountRecordsView<TelegramAccountManagerTypes> 的内容
+            Logger.shared.log("App \(self.episodeId)", "AccountRecordsView.records.count = \(view.records.count)")
+            for (idx, record) in view.records.enumerated() {
+                Logger.shared.log("App \(self.episodeId)", "Record[\(idx)]: id=\(record.id), attributes.count=\(record.attributes.count)")
+                for (attrIdx, attribute) in record.attributes.enumerated() {
+                    Logger.shared.log("App \(self.episodeId)", "  Attribute[\(attrIdx)]: \(attribute)")
+                    if case let .backupData(backupData) = attribute {
+                        if let data = backupData.data {
+                            Logger.shared.log("App \(self.episodeId)", "    backupData.data.notificationEncryptionKeyId: \(data.notificationEncryptionKeyId?.base64EncodedString() ?? "nil")")
+                            Logger.shared.log("App \(self.episodeId)", "    backupData.data.notificationEncryptionKey: \(data.notificationEncryptionKey?.base64EncodedString() ?? "nil")")
+                        } else {
+                            Logger.shared.log("App \(self.episodeId)", "    backupData.data: nil")
+                        }
+                    }
+                }
+            }
             self.accountManagerState = extractAccountManagerState(records: view)
+            Logger.shared.log("App \(self.episodeId)", "最新accountManagerState\(String(describing: self.accountManagerState))")
         })
-        Logger.shared.log("App \(self.episodeId)", "获取账户管理状态完成")
 
 
         Logger.shared.log("App \(self.episodeId)", "开始初始化SharedApplicationContext信号")
@@ -1222,6 +1253,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 return (sharedApplicationContext, transaction.getSharedData(SharedDataKeys.loggingSettings)?.get(LoggingSettings.self) ?? LoggingSettings.defaultSettings)
             }
         }
+        // sharedApplicationContext
         self.sharedContextPromise.set(sharedContextSignal
         |> mapToSignal { sharedApplicationContext, loggingSettings -> Signal<SharedApplicationContext, NoError> in
             Logger.shared.logToFile = loggingSettings.logToFile
@@ -1340,7 +1372,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let contextReadyDisposable = MetaDisposable()
         
         let startTime = CFAbsoluteTimeGetCurrent()
-        self.contextDisposable.set((self.context.get()
+        self.contextDisposable.set((self.context.get() // AuthorizedApplicationContext
         |> deliverOnMainQueue).start(next: { context in
             print("Application: context took \(CFAbsoluteTimeGetCurrent() - startTime) to become available")
             
@@ -1372,6 +1404,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     print("Launch to ready took \((CFAbsoluteTimeGetCurrent() - launchStartTime) * 1000.0) ms")
 
                     self.mainWindow.debugAction = nil
+                    // 设置用户界面
                     self.mainWindow.viewController = context.rootController
                     
                     if firstTime {
@@ -1623,6 +1656,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             })
         }*/
         
+        // 检查版本升级
         self.maybeCheckForUpdates()
 
         #if canImport(AppCenter)

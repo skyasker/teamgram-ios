@@ -138,17 +138,20 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         return self.authorizationPushConfigurationValue.get()
     }
     
+    // 下面三个对象组是核心
+    // 1
     private var activeAccountsValue: (primary: AccountContext?, accounts: [(AccountRecordId, AccountContext, Int32)], currentAuth: UnauthorizedAccount?)?
     private let activeAccountsPromise = Promise<(primary: AccountContext?, accounts: [(AccountRecordId, AccountContext, Int32)], currentAuth: UnauthorizedAccount?)>()
     public var activeAccountContexts: Signal<(primary: AccountContext?, accounts: [(AccountRecordId, AccountContext, Int32)], currentAuth: UnauthorizedAccount?), NoError> {
         return self.activeAccountsPromise.get()
     }
+    // 2
     private let managedAccountDisposables = DisposableDict<AccountRecordId>()
     private let activeAccountsWithInfoPromise = Promise<(primary: AccountRecordId?, accounts: [AccountWithInfo])>()
     public var activeAccountsWithInfo: Signal<(primary: AccountRecordId?, accounts: [AccountWithInfo]), NoError> {
         return self.activeAccountsWithInfoPromise.get()
     }
-    
+    // 3
     private var activeUnauthorizedAccountValue: UnauthorizedAccount?
     private let activeUnauthorizedAccountPromise = Promise<UnauthorizedAccount?>()
     public var activeUnauthorizedAccount: Signal<UnauthorizedAccount?, NoError> {
@@ -380,6 +383,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             return navigationController.acceptPossibleControllerDropContent(content: content)
         }
         
+        // 下面开始监听监听各种设置的变化，没个变化都有对应的方法来处理
         self._autodownloadSettings.set(.single(initialPresentationDataAndSettings.autodownloadSettings)
         |> then(accountManager.sharedData(keys: [SharedDataKeys.autodownloadSettings])
             |> map { sharedData in

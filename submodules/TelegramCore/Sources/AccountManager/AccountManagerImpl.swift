@@ -85,6 +85,7 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
         self.loginTokensPath = "\(basePath)/login-tokens"
         self.temporarySessionId = temporarySessionId
         let _ = try? FileManager.default.createDirectory(atPath: basePath, withIntermediateDirectories: true, attributes: nil)
+        postboxLog("AccountManagerImpl打开GuardValueBox/guard_db")
         guard let guardValueBox = SqliteValueBox(basePath: basePath + "/guard_db", queue: queue, isTemporary: isTemporary, isReadOnly: false, useCaches: useCaches, removeDatabaseOnError: removeDatabaseOnError, encryptionParameters: nil, upgradeProgress: { _ in }) else {
             postboxLog("Could not open guard value box at \(basePath + "/guard_db")")
             postboxLogSync()
@@ -95,6 +96,7 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
         
         var valueBox: SqliteValueBox?
         for i in 0 ..< 3 {
+            postboxLog("AccountManagerImpl打开SqliteValueBox/db")
             if let valueBoxValue = SqliteValueBox(basePath: basePath + "/db", queue: queue, isTemporary: isTemporary, isReadOnly: isReadOnly, useCaches: useCaches, removeDatabaseOnError: removeDatabaseOnError, encryptionParameters: nil, upgradeProgress: { _ in }) {
                 valueBox = valueBoxValue
                 break
@@ -158,6 +160,9 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
         }
         
         postboxLog("AccountManager: currentAccountId = \(String(describing: currentAtomicState.currentRecordId))")
+        postboxLog("AccountManager: currentAuthAccountRecord = \(String(describing: currentAtomicState.currentAuthRecord))")
+        postboxLog("AccountManager: records = \(String(describing: currentAtomicState.records.count))")
+        postboxLog("AccountManager: accessChallengeData = \(String(describing: currentAtomicState.accessChallengeData.lockId))")
         
         self.tables.append(self.legacyMetadataTable)
         self.tables.append(self.legacyRecordTable)
@@ -544,6 +549,7 @@ public final class AccountManager<Types: AccountManagerTypes> {
     }
     
     public init(basePath: String, isTemporary: Bool, isReadOnly: Bool, useCaches: Bool, removeDatabaseOnError: Bool) {
+        postboxLog("AccountManager initialized with basePath: \(basePath), isTemporary: \(isTemporary), isReadOnly: \(isReadOnly), useCaches: \(useCaches), removeDatabaseOnError: \(removeDatabaseOnError)")
         self.queue = sharedQueue
         self.basePath = basePath
         var temporarySessionId: Int64 = 0
@@ -558,6 +564,7 @@ public final class AccountManager<Types: AccountManagerTypes> {
                 preconditionFailure()
             }
         })
+        postboxLog("AccountManager创建MediaBox")
         self.mediaBox = MediaBox(basePath: basePath + "/media", isMainProcess: removeDatabaseOnError)
     }
     

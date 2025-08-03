@@ -3921,7 +3921,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }
             
             if resetCurrentEntry {
-                strongSelf.selectTab(id: selectedEntryId)
+                // @xsun
+                // 1. 点设置按钮会回到会话页
+//                strongSelf.selectTab(id: selectedEntryId)
             }
         }))
     }
